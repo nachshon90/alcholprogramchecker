@@ -133,3 +133,35 @@ jobs:
       - name: Stop the container
         if: always()
         run: docker rm -f checker || true
+
+  static:
+    name: Static browser build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The parity test runs the Python reference implementation, which needs
+      # Pillow. It does not need the Tesseract binary.
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      # Two copies of the compliance logic must not drift apart.
+      - name: Python and JavaScript must agree
+        run: node tests/parity.mjs
+
+      - name: Drive the static build in a real browser
+        run: node tests/browser.mjs

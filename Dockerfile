@@ -25,9 +25,15 @@ COPY . .
 
 # Run as an unprivileged user. Nothing here needs root, and the app never
 # writes to disk outside the system temporary directory.
-RUN useradd --create-home --shell /usr/sbin/nologin checker \
+# UID 1000 explicitly: Hugging Face Spaces runs containers as that user, and
+# pinning it is harmless on every other host.
+# Fall back to an automatic UID if 1000 is ever already taken, so the build
+# cannot fail on a base-image change.
+RUN (useradd --create-home --uid 1000 --shell /usr/sbin/nologin checker \
+     || useradd --create-home --shell /usr/sbin/nologin checker) \
     && chown -R checker:checker /app
 USER checker
+ENV HOME=/home/checker
 
 ENV PORT=8080 \
     PYTHONUNBUFFERED=1 \

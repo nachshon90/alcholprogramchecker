@@ -18,6 +18,69 @@ together as one container. One picture on its own is checked on its own.
 It runs entirely on your own computer. There are no cloud services, no
 accounts, and no outbound network calls.
 
+There are two builds of the same checker:
+
+| Build | Where it runs | Speed | Needs |
+| --- | --- | --- | --- |
+| **`web/` &ndash; static page** | Entirely in your browser, using WebAssembly OCR | ~3&ndash;4 s a label | Nothing. Open it, or host it free anywhere |
+| **Python app** | A local server, using native Tesseract | ~0.5&ndash;1.5 s a label | Python and Tesseract installed |
+
+Both apply the same rules, and a parity test checks they agree. Use the
+static page if you want a public URL or no installation; use the Python app
+if you want the fastest checking or the batch CSV tooling.
+
+---
+
+## The static page (no installation, free to host)
+
+`web/` is a complete browser-only version. There is no server: the OCR engine
+is Tesseract compiled to WebAssembly, vendored into the repository, and it
+runs in the visitor's browser. **Label pictures never leave the device**, so
+this restores the privacy guarantee that hosting the server build would give
+up.
+
+### Try it locally
+
+```bash
+cd web && python3 -m http.server 8099
+```
+
+Then open <http://127.0.0.1:8099>. No installation, no Tesseract, no Python
+packages.
+
+### Publish it free
+
+- **GitHub Pages** &ndash; `.github/workflows/pages.yml` publishes `web/` on
+  every push to `main`. Turn it on once under **Settings → Pages → Source:
+  GitHub Actions**. Your URL becomes
+  `https://<username>.github.io/alcholprogramchecker/`.
+- **Render, Netlify, Cloudflare Pages, GitLab Pages** &ndash; all free for
+  static sites. Publish directory: `web`, build command: none.
+  `render.yaml` already declares the static service.
+
+### What to know about it
+
+- **First load is about 7 MB** (the OCR engine and the English model). After
+  that the browser caches it and checks are quick.
+- **It is slower than the Python build**: roughly 3&ndash;4 seconds a label
+  against 0.5&ndash;1.5, because WebAssembly OCR cannot use native code. Still
+  inside the 5-second budget.
+- **The batch CSV mode works too**: choose the spreadsheet and then all the
+  pictures together, and they are matched by file name.
+- **No cookies, no storage, no network requests while checking.** Everything
+  the page needs is served from the same site.
+- The vendored libraries and their licences are listed in
+  `web/vendor/README.md`.
+
+### Two implementations, kept honest
+
+The compliance logic now exists twice: `labelcheck/` in Python and `web/js/`
+in JavaScript. Two copies that quietly disagree would be worse than having
+one, so `tests/parity.mjs` runs the same inputs through both - parsing,
+fuzzy-match scores, beverage classification, tolerances and type-size tiers -
+and fails on any difference. It runs in CI. Python remains the reference
+implementation, with the larger test suite.
+
 ---
 
 ## For reviewers: the fastest way to see it work
@@ -438,6 +501,67 @@ what changes:
 None of this affects a local run. With no password set, the guards are
 inactive and the experience is exactly as before.
 
+### Choosing a host
+
+OCR is CPU-bound, which is the only thing that really constrains the choice.
+A host with a fraction of a core will run checks many times slower than the
+half-second you see locally.
+
+| Host | Cost | Notes |
+| --- | --- | --- |
+| **Hugging Face Spaces** | Free | Runs Docker on real cores. No code changes. Easiest free option. |
+| **Google Cloud Run** | Free tier | Scales to zero, so you pay nothing when idle. Needs a Google Cloud account. |
+| **Render** | Paid from ~$7/mo | Blueprint included. The free instance works but has roughly a tenth of a core, so checks are slow and it sleeps when idle. |
+| **Your own machine** | Free | Fastest and fully private. No hosting needed. |
+
+**A static host cannot run the Python build**, because static hosting serves
+files only. That is exactly what the browser-only build in `web/` is for: see
+[The static page](#the-static-page-no-installation-free-to-host) above, which
+is free on any static host and keeps the pictures on the visitor's device.
+
+### Deploying free to Hugging Face Spaces
+
+1. Create a Space at <https://huggingface.co/new-space>, choosing
+   **Docker → Blank** as the SDK.
+2. In the Space's **Settings → Variables and secrets**, add a secret:
+   `LABELCHECK_PASSWORD`, set to a long random value. The app refuses to
+   start without it, so this step is not optional.
+3. Publish:
+
+   ```bash
+   ./deploy/huggingface/publish.sh <your-hf-username>
+   ```
+
+   The script exports the committed tree, swaps in the Space's own README
+   (its YAML header is how a Space is configured), and pushes. It never
+   stores or echoes your token.
+
+Your URL will be `https://<username>-alcohol-label-checker.hf.space`. The
+first build takes a few minutes while Tesseract is installed.
+
+### Deploying free to Google Cloud Run
+
+```bash
+gcloud run deploy alcohol-label-checker \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --cpu 1 \
+  --max-instances 1 \
+  --set-env-vars LABELCHECK_BEHIND_PROXY=1 \
+  --set-secrets LABELCHECK_PASSWORD=labelcheck-password:latest
+```
+
+`--allow-unauthenticated` refers to Google's own IAM layer; the app's own
+password still applies. Keep `--max-instances 1`, for the reason in the
+warning below. Create the secret first with:
+
+```bash
+printf '%s' 'choose-a-long-random-password' \
+  | gcloud secrets create labelcheck-password --data-file=-
+```
+
 ### Deploying to Render
 
 The repository includes `render.yaml`, so Render can read the whole setup:
@@ -447,6 +571,9 @@ The repository includes `render.yaml`, so Render can read the whole setup:
 3. Set `LABELCHECK_PASSWORD` in the dashboard to a long random value. It is
    deliberately marked `sync: false` so the password is never committed.
 4. Deploy.
+
+To try Render's free instance first, change `plan: starter` to `plan: free`
+in `render.yaml`. Expect slow checks and a cold start of up to a minute.
 
 ### Deploying to any Docker host
 
@@ -525,6 +652,18 @@ They come in three layers:
   the open health check, the honest hosted footer, and that `wsgi.py` really
   does refuse to start unprotected.
 
+The static build has its own tests, run with Node:
+
+```bash
+node tests/parity.mjs     # Python and JavaScript must agree
+node tests/browser.mjs    # drives the real page in Chromium
+```
+
+`browser.mjs` serves `web/` and drives Chromium through the whole path —
+vendored WebAssembly OCR, the ported rules, every page — checking that a
+compliant label passes, an undersized warning is caught, a missing warning is
+caught, and a front/back pair is combined correctly. Both run in CI.
+
 The sample labels carry deliberate defects:
 
 | Sample | Defect it exercises |
@@ -551,6 +690,7 @@ wsgi.py                    Production entry point for a hosted deployment
 run.sh                     Dependency check, then start
 Dockerfile                 Image that includes the Tesseract engine
 render.yaml                Deployment blueprint for Render
+deploy/huggingface/        Free Docker hosting: Space card and publish script
 labelcheck/
   config.py                Limits, time budgets, feature flags
   rules.py                 Per-beverage CFR rules, tolerances, field matrix
@@ -566,7 +706,13 @@ labelcheck/
   findings.py              One finding: check, verdict, plain-English text
 templates/  static/        Large-type, high-contrast interface
 samples/make_samples.py    Generates the test artwork
+web/                       The static, browser-only build
+  index.html bulk.html help.html
+  js/                      The compliance logic, ported to JavaScript
+  vendor/                  Tesseract WebAssembly, vendored (see its README)
 tests/                     Unit and integration tests
+  browser.mjs              Drives the static build in Chromium
+  parity.mjs               Python and JavaScript must agree
 ```
 
 ---
