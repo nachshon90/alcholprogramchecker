@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong{% endblock %}
+{% block content %}
+<h2>Something went wrong</h2>
+<div class="notice error"><p>{{ message }}</p></div>
+<div class="actions">
+  <a class="button" href="{{ url_for('index') }}">Go back to the start</a>
+</div>
+{% endblock %}

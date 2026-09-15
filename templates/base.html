@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Alcohol Label Compliance Checker{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the main part of this page</a>
+<header class="site">
+  <div class="wrap">
+    <h1>Alcohol Label Compliance Checker</h1>
+    <p>Compares your label picture with the details you entered, and checks
+       federal labelling rules.</p>
+  </div>
+</header>
+<nav class="main" aria-label="Main">
+  <ul>
+    <li><a href="{{ url_for('index') }}"
+           {% if request.endpoint in ('index','check') %}aria-current="page"{% endif %}>
+        Check one label</a></li>
+    <li><a href="{{ url_for('bulk_form') }}"
+           {% if request.endpoint in ('bulk_form','bulk_run') %}aria-current="page"{% endif %}>
+        Check many labels</a></li>
+    <li><a href="{{ url_for('help_page') }}"
+           {% if request.endpoint == 'help_page' %}aria-current="page"{% endif %}>
+        Help</a></li>
+  </ul>
+</nav>
+<main id="main" class="wrap">
+{% block content %}{% endblock %}
+</main>
+<footer class="site">
+  <div class="wrap">
+    <p><strong>Everything runs on this computer.</strong> Your label pictures
+       and company details are never sent over the internet, and nothing is
+       saved after you close the page.</p>
+    <p class="small">This tool is a checking aid. It does not replace review
+       by a qualified person, and it is not an official government decision.</p>
+  </div>
+</footer>
+</body>
+</html>

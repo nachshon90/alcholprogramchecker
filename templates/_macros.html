@@ -1,0 +1,32 @@
+{# Shared display helpers. Status is always shown as a symbol AND a word as
+   well as a colour, so results stay readable without colour vision. #}
+{% macro symbol(status) -%}
+  {%- if status == 'pass' %}&#10004;
+  {%- elif status == 'fail' %}&#10006;
+  {%- elif status == 'warn' %}&#33;
+  {%- else %}&#63;{% endif -%}
+{%- endmacro %}
+
+{% macro badge(status, word) -%}
+<span class="badge b-{{ status }}">{{ symbol(status) }} {{ word }}</span>
+{%- endmacro %}
+
+{% macro finding_block(finding) -%}
+<div class="finding">
+  <p class="title">{{ symbol(finding.status) }} {{ finding.title }}
+    {% if finding.advisory %}<span class="tag-advisory">ADVICE ONLY</span>{% endif %}
+  </p>
+  <p>{{ finding.detail }}</p>
+  {% if finding.expected or finding.found %}
+  <dl class="compare">
+    {% if finding.expected %}
+      <dt>Should be:</dt><dd>{{ finding.expected }}</dd>
+    {% endif %}
+    {% if finding.found %}
+      <dt>On the label:</dt><dd>{{ finding.found }}</dd>
+    {% endif %}
+  </dl>
+  {% endif %}
+  {% if finding.cite %}<p class="cite">Rule: {{ finding.cite }}</p>{% endif %}
+</div>
+{%- endmacro %}

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, finding_block, symbol with context %}
+{% block title %}Result &ndash; Alcohol Label Compliance Checker{% endblock %}
+{% block content %}
+
+<h2>Result{% if report.reference %} for {{ report.reference }}{% endif %}</h2>
+
+{% set v = 'unknown' if report.error else report.overall %}
+<div class="verdict v-{{ v }}">
+  <div class="mark" aria-hidden="true">{{ symbol(v) }}</div>
+  <div>
+    <div class="text">{{ report.verdict }}</div>
+    <div class="sub">
+      Checked as: <strong>{{ report.beverage_plain }}</strong>
+      ({{ report.beverage_display }}, {{ report.authority }}).
+      {% if report.panel_count > 1 %}
+        Checked {{ report.panel_count }} pictures together as one container.
+      {% endif %}
+      Took {{ '%.1f'|format(report.elapsed) }} seconds.
+    </div>
+  </div>
+</div>
+
+{% if report.error %}
+<div class="notice error"><p>{{ report.error }}</p></div>
+{% endif %}
+
+{% for note in report.notes %}
+<div class="notice warn"><p>{{ note }}</p></div>
+{% endfor %}
+
+{% if report.warning_panel_label %}
+<div class="notice">
+  <p>The Government Health Warning was found on
+     <strong>{{ report.warning_panel_label }}</strong>, and its letter size was
+     measured on that picture.</p>
+</div>
+{% endif %}
+
+{% if not report.error %}
+  {% set tally = report.counts() %}
+  <div class="tiles">
+    <div class="tile t-pass"><span class="n">{{ tally['pass'] }}</span>
+      <span class="k">things that match</span></div>
+    <div class="tile t-fail"><span class="n">{{ tally['fail'] }}</span>
+      <span class="k">problems found</span></div>
+    <div class="tile t-warn"><span class="n">{{ tally['warn'] + tally['unknown'] }}</span>
+      <span class="k">to check by hand</span></div>
+  </div>
+
+  {% set problems = report.problem_fields() %}
+  {% if problems %}
+  <h3>What you need to look at</h3>
+  <p>These are listed worst first.</p>
+  {% for field in problems %}
+    <div class="result-row s-{{ field.status }}">
+      <div class="result-head">
+        <span class="name">{{ field.label }}</span>
+        {{ badge(field.status, field.status_word) }}
+      </div>
+      {% for finding in field.findings %}{{ finding_block(finding) }}{% endfor %}
+    </div>
+  {% endfor %}
+  {% endif %}
+
+  {% set good = report.fields | rejectattr('status', 'in', ['fail','warn','unknown']) | list %}
+  {% if good %}
+  <h3>What matched correctly</h3>
+  {% for field in good %}
+    <div class="result-row s-{{ field.status }}">
+      <div class="result-head">
+        <span class="name">{{ field.label }}</span>
+        {{ badge(field.status, field.status_word) }}
+      </div>
+      {% for finding in field.findings %}
+        <p>{{ symbol(finding.status) }} {{ finding.detail }}</p>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  {% endif %}
+{% endif %}
+
+{% set shown = thumbnails | select | list %}
+{% if shown %}
+<h3>The picture{{ '' if shown|length == 1 else 's' }} you sent</h3>
+<div class="preview-row">
+  {% for image in thumbnails %}
+    {% if image %}
+    <figure class="label-preview">
+      <img src="{{ image }}" alt="A small copy of label picture {{ loop.index }}">
+      <figcaption>
+        Picture {{ loop.index }}{% if thumbnails|length > 1 %}
+          &ndash; {{ 'front' if loop.index0 == 0 else 'back' }}{% endif %}
+        {%- if report.image_names and loop.index0 < report.image_names|length %}
+          <br><span class="small muted">{{ report.image_names[loop.index0] }}</span>
+        {%- endif %}
+      </figcaption>
+    </figure>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if report.ocr_text %}
+<details>
+  <summary>Show the words the computer read from your label</summary>
+  <p class="small">If something below looks wrong, the picture may be blurry or
+     at an angle. A clearer picture usually fixes it.
+     {% if report.scale_source != 'unknown' %}
+     Real-world size taken from: {{ report.scale_source }}.{% endif %}</p>
+  <pre class="ocr">{{ report.ocr_text }}</pre>
+</details>
+{% endif %}
+
+<div class="actions">
+  <a class="button" href="{{ url_for('index') }}">Check another label</a>
+  <a class="button secondary" href="{{ url_for('bulk_form') }}">Check many labels at once</a>
+</div>
+{% endblock %}

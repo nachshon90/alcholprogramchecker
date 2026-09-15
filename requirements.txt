@@ -1,0 +1,18 @@
+# Python packages. Install with:  pip install -r requirements.txt
+#
+# Everything here runs locally. There is no cloud service client in this
+# list, and the application makes no outbound network calls.
+
+Flask>=3.0,<4.0
+Pillow>=10.0
+pytesseract>=0.3.10
+
+# NOTE: pytesseract is only a thin wrapper. The actual OCR engine is
+# Tesseract, which is a separate program you must install on the computer:
+#
+#   Ubuntu / Debian:  sudo apt-get install tesseract-ocr
+#   Red Hat / Fedora: sudo dnf install tesseract
+#   macOS:            brew install tesseract
+#   Windows:          https://github.com/UB-Mannheim/tesseract/wiki
+#
+# Verify with:  tesseract --version

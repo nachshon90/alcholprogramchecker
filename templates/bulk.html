@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Check many labels{% endblock %}
+{% block content %}
+
+{% if engine_error %}
+<div class="notice error">
+  <p>The text-reading software is not ready on this computer.</p>
+  <p class="small" style="white-space: pre-wrap">{{ engine_error }}</p>
+</div>
+{% endif %}
+{% if error %}<div class="notice error"><p>{{ error }}</p></div>{% endif %}
+
+<h2>Check many labels at once</h2>
+<p class="lead">Give the tool a spreadsheet listing your products, plus the
+label pictures. It checks every row and gives you a results file you can open
+in Excel.</p>
+
+<h3>How this works</h3>
+<ol>
+  <li><strong>Download the blank spreadsheet</strong> and fill in one row per
+      product. The <em>image</em> column holds the picture's file name. If a
+      product has a back label as well, put its file name in the
+      <em>image_2</em> column &ndash; both pictures are then checked together
+      as one container. Leave <em>image_2</em> empty for products with a
+      single label.</li>
+  <li><strong>Put all the label pictures in one folder</strong>, then make a
+      ZIP file of that folder.</li>
+  <li><strong>Send both files</strong> using the boxes below.</li>
+</ol>
+
+<p><a class="button secondary" href="{{ url_for('download_template') }}">
+   Download the blank spreadsheet</a></p>
+
+<form method="post" action="{{ url_for('bulk_run') }}" enctype="multipart/form-data">
+  <fieldset>
+    <legend>Your spreadsheet</legend>
+    <div class="field">
+      <label for="csv_file">The CSV file listing your products</label>
+      <span class="hint">It must have a heading row and an <em>image</em>
+        column. An <em>image_2</em> column for back labels is optional.</span>
+      <input type="file" id="csv_file" name="csv_file" accept=".csv,text/csv" required>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Your label pictures</legend>
+    <div class="field">
+      <label for="zip_file">A ZIP file holding all the pictures</label>
+      <span class="hint">This is the usual way. The pictures may sit in
+        folders inside the ZIP.</span>
+      <input type="file" id="zip_file" name="zip_file" accept=".zip,application/zip">
+    </div>
+    <p class="muted"><strong>Or</strong>, if the pictures are already on this
+       computer, give the folder instead:</p>
+    <div class="field">
+      <label for="folder">Folder on this computer <span class="muted">(optional)</span></label>
+      <span class="hint">For example: /home/jane/labels</span>
+      <input type="text" id="folder" name="folder">
+    </div>
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit">Check all these labels</button>
+  </div>
+</form>
+
+<div class="notice">
+  <p><strong>Nothing is kept.</strong> Your spreadsheet and pictures are used
+     to run the check and then thrown away. The results file is available for
+     ten minutes and is removed once you download it.</p>
+</div>
+{% endblock %}
