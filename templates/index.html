@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if engine_error %}
+<div class="notice error">
+  <p>The text-reading software is not ready on this computer.</p>
+  <p class="small" style="white-space: pre-wrap">{{ engine_error }}</p>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="notice error"><p>{{ error }}</p></div>
+{% endif %}
+
+<h2>Check one label</h2>
+<p class="lead">Type in your company and product details, add a picture of the
+label, and press <strong>Check this label</strong>. You will get an answer in
+about {{ time_budget|round|int }} seconds or less.</p>
+
+<form method="post" action="{{ url_for('check') }}" enctype="multipart/form-data">
+
+  <fieldset>
+    <legend>Step 1 &ndash; Your company</legend>
+
+    <div class="field">
+      <label for="bottler_name">Company name (bottler, producer or importer)</label>
+      <span class="hint">Exactly as it should appear on the label.
+        For example: Old Bridge Distillery</span>
+      <input type="text" id="bottler_name" name="bottler_name"
+             value="{{ form.get('bottler_name','') }}" autocomplete="organization">
+    </div>
+
+    <div class="field">
+      <label for="bottler_address">Company address</label>
+      <span class="hint">City and state is enough. For example: Frankfort, Kentucky</span>
+      <input type="text" id="bottler_address" name="bottler_address"
+             value="{{ form.get('bottler_address','') }}">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step 2 &ndash; Your product</legend>
+
+    <div class="field">
+      <label for="brand_name">Brand name</label>
+      <span class="hint">For example: Old Bridge</span>
+      <input type="text" id="brand_name" name="brand_name"
+             value="{{ form.get('brand_name','') }}">
+    </div>
+
+    <div class="field">
+      <label for="beverage_class">What kind of drink is it?</label>
+      <span class="hint">This decides which rules are applied.</span>
+      <select id="beverage_class" name="beverage_class">
+        <option value="">Work it out from the class or type below</option>
+        {% for key, name in beverage_choices %}
+        <option value="{{ key }}"
+          {% if form.get('beverage_class') == key %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="class_type">Class or type</label>
+      <span class="hint">For example: Kentucky Straight Bourbon Whiskey,
+        India Pale Ale, Cabernet Sauvignon</span>
+      <input type="text" id="class_type" name="class_type"
+             value="{{ form.get('class_type','') }}">
+    </div>
+
+    <div class="two-up">
+      <div class="field">
+        <label for="alcohol_content">Alcohol content</label>
+        <span class="hint">For example: 45% ABV, or 90 proof</span>
+        <input type="text" id="alcohol_content" name="alcohol_content"
+               value="{{ form.get('alcohol_content','') }}">
+      </div>
+
+      <div class="field">
+        <label for="net_contents">Net contents</label>
+        <span class="hint">For example: 750 mL, or 12 fl oz</span>
+        <input type="text" id="net_contents" name="net_contents"
+               value="{{ form.get('net_contents','') }}">
+      </div>
+    </div>
+
+    <div class="checkbox">
+      <input type="checkbox" id="is_import" name="is_import" value="yes"
+             {% if form.get('is_import') %}checked{% endif %}>
+      <label for="is_import">This product is imported into the United States</label>
+    </div>
+
+    <div class="field">
+      <label for="country_of_origin">Country it comes from</label>
+      <span class="hint">Only needed for imported products. For example: Scotland</span>
+      <input type="text" id="country_of_origin" name="country_of_origin"
+             value="{{ form.get('country_of_origin','') }}">
+    </div>
+
+    <div class="field">
+      <label for="contains_sulfites">Does it contain sulfites?</label>
+      <span class="hint">Wine must say CONTAINS SULFITES when it holds 10 parts
+        per million or more. Nearly all wine does.</span>
+      <select id="contains_sulfites" name="contains_sulfites">
+        <option value="">Not sure &ndash; check if the wording is there</option>
+        <option value="yes" {% if form.get('contains_sulfites')=='yes' %}selected{% endif %}>
+          Yes, 10 parts per million or more</option>
+        <option value="no" {% if form.get('contains_sulfites')=='no' %}selected{% endif %}>
+          No, below 10 parts per million</option>
+      </select>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Step 3 &ndash; The label picture</legend>
+
+    <div class="field">
+      <label for="label_image">Picture of the label</label>
+      <span class="hint">PNG, JPEG, TIFF, BMP, WEBP or GIF. A sharp picture
+        taken straight on works best.</span>
+      <input type="file" id="label_image" name="label_image"
+             accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif" required>
+    </div>
+
+    <div class="field">
+      <label for="label_width_mm">How wide is the real label, in millimetres?
+        <span class="muted">(optional, but recommended)</span></label>
+      <span class="hint">Measure the printed label with a ruler. Without this
+        the tool cannot check whether the health warning letters are big
+        enough. A typical wine label is about 100 mm wide.</span>
+      <input type="number" id="label_width_mm" name="label_width_mm"
+             min="1" max="2000" step="0.1"
+             value="{{ form.get('label_width_mm','') }}">
+    </div>
+
+    <div class="field">
+      <label for="reference">Your own reference <span class="muted">(optional)</span></label>
+      <span class="hint">Anything that helps you find this later, such as a
+        product code.</span>
+      <input type="text" id="reference" name="reference"
+             value="{{ form.get('reference','') }}">
+    </div>
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit">Check this label</button>
+  </div>
+</form>
+{% endblock %}

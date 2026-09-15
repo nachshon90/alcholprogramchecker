@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, symbol with context %}
+{% block title %}Batch results{% endblock %}
+{% block content %}
+
+<h2>Results for {{ summary.total }} label{{ '' if summary.total == 1 else 's' }}</h2>
+
+<div class="tiles">
+  <div class="tile t-pass"><span class="n">{{ summary.passed }}</span>
+    <span class="k">passed</span></div>
+  <div class="tile t-fail"><span class="n">{{ summary.failed }}</span>
+    <span class="k">had problems</span></div>
+  <div class="tile t-warn"><span class="n">{{ summary.needs_attention }}</span>
+    <span class="k">need a human look</span></div>
+</div>
+
+<p class="lead">Checked in {{ '%.1f'|format(summary.elapsed) }} seconds
+   &ndash; an average of {{ '%.1f'|format(summary.average_seconds) }} seconds
+   for each label.</p>
+
+<div class="actions">
+  <a class="button" href="{{ url_for('download_results', token=token) }}">
+     Download all results as a spreadsheet</a>
+  <a class="button secondary" href="{{ url_for('bulk_form') }}">Check another batch</a>
+</div>
+
+{% for warning in summary.warnings %}
+<div class="notice warn"><p>{{ warning }}</p></div>
+{% endfor %}
+
+<h3>Every label</h3>
+<table class="results">
+  <thead>
+    <tr>
+      <th scope="col">Reference</th>
+      <th scope="col">Picture</th>
+      <th scope="col">Kind of drink</th>
+      <th scope="col">Result</th>
+      <th scope="col">What to look at</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for report in summary.reports %}
+    {% set v = 'unknown' if report.error else report.overall %}
+    <tr class="r-{{ v }}">
+      <td>{{ report.reference or '&mdash;'|safe }}</td>
+      <td>{{ report.image_name }}</td>
+      <td>{{ report.beverage_plain }}</td>
+      <td>{{ badge(v, 'COULD NOT CHECK' if report.error else report.verdict) }}</td>
+      <td>
+        {% if report.error %}
+          {{ report.error }}
+        {% else %}
+          {% set issues = report.all_findings()
+               | rejectattr('status', 'equalto', 'pass') | list %}
+          {% if issues %}
+            <ul style="margin:0; padding-left:1.2rem">
+            {% for finding in issues %}
+              <li>{{ symbol(finding.status) }} {{ finding.title }}
+                {% if finding.advisory %}
+                  <span class="tag-advisory">ADVICE ONLY</span>{% endif %}</li>
+            {% endfor %}
+            </ul>
+          {% else %}
+            Everything matched.
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

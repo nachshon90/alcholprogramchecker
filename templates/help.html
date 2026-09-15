@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Help{% endblock %}
+{% block content %}
+<h2>Help</h2>
+
+<h3>What this tool does</h3>
+<p>You type in your company and product details and add a picture of the
+label. The tool reads the words on the picture and compares them with what
+you typed, one item at a time. It then tells you which items match and which
+do not.</p>
+
+<h3>What it checks</h3>
+<ul>
+  <li><strong>Brand name</strong> &ndash; is it on the label, and does it match?</li>
+  <li><strong>Class or type</strong> &ndash; for example Bourbon Whiskey, India Pale Ale.</li>
+  <li><strong>Alcohol content</strong> &ndash; compared allowing the small
+      difference the law permits. This differs by drink: 0.3 percentage points
+      for beer, 0.15 for spirits, and 1.0 or 1.5 for wine depending on
+      strength.</li>
+  <li><strong>Net contents</strong> &ndash; how much is in the container, and
+      whether that is a standard container size.</li>
+  <li><strong>Bottler, producer or importer name and address</strong>.</li>
+  <li><strong>Country of origin</strong> &ndash; for imported products.</li>
+  <li><strong>Sulfite statement</strong> &ndash; wine must say CONTAINS SULFITES
+      when it holds 10 parts per million or more.</li>
+  <li><strong>The Government Health Warning</strong> &ndash; see below.</li>
+</ul>
+
+<h3>The Government Health Warning</h3>
+<p>Every alcoholic drink of 0.5% alcohol or more must carry this exact
+wording:</p>
+<blockquote>
+  <p><strong>GOVERNMENT WARNING:</strong> (1) According to the Surgeon General,
+  women should not drink alcoholic beverages during pregnancy because of the
+  risk of birth defects. (2) Consumption of alcoholic beverages impairs your
+  ability to drive a car or operate machinery, and may cause health
+  problems.</p>
+</blockquote>
+<p>The tool checks four separate things:</p>
+<ol>
+  <li><strong>Is it there</strong>, and is every part of the wording correct?</li>
+  <li><strong>Are the words GOVERNMENT WARNING in capital letters?</strong>
+      This is required by law.</li>
+  <li><strong>Are the letters big enough?</strong> The law sets a minimum
+      height: 1 mm on containers of 237 mL or less, 2 mm on containers up to
+      3 L, and 3 mm above that.</li>
+  <li><strong>Is the text spread out enough?</strong> No more than 12
+      characters may be squeezed into one inch.</li>
+</ol>
+
+<div class="notice warn">
+  <p><strong>To check letter height, the tool must know the real size of your
+  label.</strong> Measure the printed label with a ruler and type its width in
+  millimetres into the box on the check page. Without it, the tool will say it
+  cannot check the letter height rather than guess.</p>
+</div>
+
+<h3>About capital letters</h3>
+<p>Federal law requires only the words <strong>GOVERNMENT WARNING</strong> to
+be in capitals and bold. If the rest of the warning is in small letters, the
+tool marks that as <span class="tag-advisory">ADVICE ONLY</span>, because it
+is a house-style preference rather than a legal problem. Items marked
+<span class="tag-advisory">ADVICE ONLY</span> never cause a label to be
+reported as failing.</p>
+
+<h3>Why does it say &ldquo;cannot check&rdquo;?</h3>
+<p>The tool says this rather than guessing when it does not have what it
+needs &ndash; for example when the label picture is too blurry to read, or
+when you have not given the real label width. A guess on a safety rule would
+be worse than an honest answer.</p>
+
+<h3>Getting a good picture</h3>
+<ul>
+  <li>Take the picture straight on, not at an angle.</li>
+  <li>Use good, even light and avoid glare or shadows.</li>
+  <li>Fill the frame with the label.</li>
+  <li>Make sure the small print is in focus.</li>
+</ul>
+
+<h3>Your privacy</h3>
+<p>This tool runs entirely on this computer. Pictures and company details are
+never sent over the internet, are not saved to any file or database, and are
+gone as soon as the page is finished with them.</p>
+
+<h3>One more thing</h3>
+<p>This tool is a checking aid. It is not an official government decision, and
+it does not replace review by a qualified person. Always confirm anything it
+flags by eye.</p>
+{% endblock %}

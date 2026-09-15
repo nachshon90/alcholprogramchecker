@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, finding_block, symbol with context %}
+{% block title %}Result &ndash; Alcohol Label Compliance Checker{% endblock %}
+{% block content %}
+
+<h2>Result{% if report.reference %} for {{ report.reference }}{% endif %}</h2>
+
+{% set v = 'unknown' if report.error else report.overall %}
+<div class="verdict v-{{ v }}">
+  <div class="mark" aria-hidden="true">{{ symbol(v) }}</div>
+  <div>
+    <div class="text">{{ report.verdict }}</div>
+    <div class="sub">
+      Checked as: <strong>{{ report.beverage_plain }}</strong>
+      ({{ report.beverage_display }}, {{ report.authority }}).
+      Took {{ '%.1f'|format(report.elapsed) }} seconds.
+    </div>
+  </div>
+</div>
+
+{% if report.error %}
+<div class="notice error"><p>{{ report.error }}</p></div>
+{% endif %}
+
+{% for note in report.notes %}
+<div class="notice warn"><p>{{ note }}</p></div>
+{% endfor %}
+
+{% if not report.error %}
+  {% set tally = report.counts() %}
+  <div class="tiles">
+    <div class="tile t-pass"><span class="n">{{ tally['pass'] }}</span>
+      <span class="k">things that match</span></div>
+    <div class="tile t-fail"><span class="n">{{ tally['fail'] }}</span>
+      <span class="k">problems found</span></div>
+    <div class="tile t-warn"><span class="n">{{ tally['warn'] + tally['unknown'] }}</span>
+      <span class="k">to check by hand</span></div>
+  </div>
+
+  {% set problems = report.problem_fields() %}
+  {% if problems %}
+  <h3>What you need to look at</h3>
+  <p>These are listed worst first.</p>
+  {% for field in problems %}
+    <div class="result-row s-{{ field.status }}">
+      <div class="result-head">
+        <span class="name">{{ field.label }}</span>
+        {{ badge(field.status, field.status_word) }}
+      </div>
+      {% for finding in field.findings %}{{ finding_block(finding) }}{% endfor %}
+    </div>
+  {% endfor %}
+  {% endif %}
+
+  {% set good = report.fields | rejectattr('status', 'in', ['fail','warn','unknown']) | list %}
+  {% if good %}
+  <h3>What matched correctly</h3>
+  {% for field in good %}
+    <div class="result-row s-{{ field.status }}">
+      <div class="result-head">
+        <span class="name">{{ field.label }}</span>
+        {{ badge(field.status, field.status_word) }}
+      </div>
+      {% for finding in field.findings %}
+        <p>{{ symbol(finding.status) }} {{ finding.detail }}</p>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  {% endif %}
+{% endif %}
+
+{% if thumbnail %}
+<h3>The picture you sent</h3>
+<div class="label-preview">
+  <img src="{{ thumbnail }}" alt="A small copy of the label you uploaded">
+</div>
+{% endif %}
+
+{% if report.ocr_text %}
+<details>
+  <summary>Show the words the computer read from your label</summary>
+  <p class="small">If something below looks wrong, the picture may be blurry or
+     at an angle. A clearer picture usually fixes it.
+     {% if report.scale_source != 'unknown' %}
+     Real-world size taken from: {{ report.scale_source }}.{% endif %}</p>
+  <pre class="ocr">{{ report.ocr_text }}</pre>
+</details>
+{% endif %}
+
+<div class="actions">
+  <a class="button" href="{{ url_for('index') }}">Check another label</a>
+  <a class="button secondary" href="{{ url_for('bulk_form') }}">Check many labels at once</a>
+</div>
+{% endblock %}

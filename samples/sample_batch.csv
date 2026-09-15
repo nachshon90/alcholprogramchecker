@@ -1,0 +1,7 @@
+image,reference,brand_name,class_type,alcohol_content,net_contents,bottler_name,bottler_address,country_of_origin,beverage_class,is_import,contains_sulfites,label_width_mm
+labels/01_bourbon_compliant.png,SKU-1001,Old Bridge,Kentucky Straight Bourbon Whiskey,45% ABV,750 mL,Old Bridge Distillery,"Frankfort, Kentucky",,distilled_spirits,,,95
+labels/02_wine_abv_mismatch.png,SKU-1002,Mountain Creek,Cabernet Sauvignon,13.5% ABV,750 mL,Mountain Creek Vineyards,"Napa, California",,wine,,yes,100
+labels/03_beer_tiny_warning.png,SKU-1003,Harbor Light,India Pale Ale,6.2% ABV,12 fl oz,Harbor Light Brewing Co.,"Portland, Maine",,malt_beverage,,,90
+labels/04_wine_no_warning.png,SKU-1004,Silver Hollow,Chardonnay,13.0% ABV,750 mL,Silver Hollow Cellars,"Sonoma, California",,wine,,yes,100
+labels/05_imported_gin_no_origin.png,SKU-1005,Thistle Row,London Dry Gin,47% ABV,700 mL,Thistle Row Distillers,Edinburgh,Scotland,distilled_spirits,yes,,95
+labels/06_cider_lowercase_warning.png,SKU-1006,Windfall Orchard,Hard Cider,6.9% ABV,500 mL,Windfall Orchard Cider Works,"Burlington, Vermont",,cider,,,90
