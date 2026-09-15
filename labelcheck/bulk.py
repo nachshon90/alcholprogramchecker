@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 
 from . import config, security
 from .application import ApplicationData, rows_from_csv
-from .checker import LabelReport, check_label
+from .checker import LabelReport, Panel, check_label
 from .findings import FAIL, PASS, UNKNOWN, WARN
 from .rules import FIELD_LABELS, FIELD_ORDER
 
@@ -147,42 +147,60 @@ def run_batch(csv_text: str, image_root: Path) -> BulkSummary:
 def _check_row(app: ApplicationData, image_root: Path) -> LabelReport:
     """Check one row, turning any failure into a reported error, not a crash.
 
-    A single unreadable file must not abandon the rest of the batch.
+    A row may name one picture or two (a front and a back label). A single
+    unreadable file must not abandon the rest of the batch.
     """
+    entries = app.panels()
     display_name = security.safe_display_name(app.image_path, "(no file named)")
-    if not app.image_path.strip():
+    if not entries:
         return _error_report(app, display_name,
                              "This row does not name a label image file.")
 
-    if not security.has_allowed_suffix(app.image_path):
-        return _error_report(
-            app, display_name,
-            "This file is not an image type the tool accepts. Use PNG, JPEG, "
-            "TIFF, BMP, WEBP or GIF.")
+    panels: List[Panel] = []
+    problems: List[str] = []
 
-    path = _find_image(image_root, app.image_path)
-    if path is None:
-        return _error_report(
-            app, display_name,
-            "The label image for this row could not be found. Check that the "
-            "file name in the CSV matches the file you supplied.")
+    for position, (named, width_mm) in enumerate(entries, start=1):
+        label = security.safe_display_name(named, f"picture {position}")
+        where = "" if len(entries) == 1 else f"Picture {position}: "
+
+        if not security.has_allowed_suffix(named):
+            problems.append(
+                f"{where}'{label}' is not an image type the tool accepts. Use "
+                "PNG, JPEG, TIFF, BMP, WEBP or GIF.")
+            continue
+
+        path = _find_image(image_root, named)
+        if path is None:
+            problems.append(
+                f"{where}'{label}' could not be found. Check that the file "
+                "name in the CSV matches the file you supplied.")
+            continue
+
+        try:
+            if path.stat().st_size > config.MAX_UPLOAD_BYTES:
+                problems.append(
+                    f"{where}'{label}' is larger than the "
+                    f"{config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
+                continue
+            panels.append(Panel(path.read_bytes(), label, width_mm))
+        except OSError as exc:
+            problems.append(f"{where}'{label}' could not be read: {exc.strerror}")
+
+    if not panels:
+        return _error_report(app, display_name, " ".join(problems)
+                             or "No label picture could be read for this row.")
 
     try:
-        if path.stat().st_size > config.MAX_UPLOAD_BYTES:
-            return _error_report(
-                app, display_name,
-                f"This image is larger than the "
-                f"{config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
-        data = path.read_bytes()
-    except OSError as exc:
-        return _error_report(app, display_name,
-                             f"This image could not be read: {exc.strerror}")
-
-    try:
-        return check_label(data, app, image_name=display_name)
+        report = check_label(panels, app)
     except Exception as exc:  # pragma: no cover - last-resort guard
         return _error_report(app, display_name,
                              f"This label could not be checked: {type(exc).__name__}")
+
+    # A missing second picture is worth saying, but must not hide the result
+    # obtained from the picture that did load.
+    for problem in problems:
+        report.notes.append(problem)
+    return report
 
 
 def _error_report(app: ApplicationData, image_name: str, message: str) -> LabelReport:
@@ -201,7 +219,8 @@ def _error_report(app: ApplicationData, image_name: str, message: str) -> LabelR
 
 # --- Results export --------------------------------------------------------
 RESULT_COLUMNS = (
-    ["reference", "image", "beverage_type", "overall_result", "seconds"]
+    ["reference", "image", "image_2", "pictures_checked", "beverage_type",
+     "overall_result", "seconds"]
     + [FIELD_LABELS[key] for key in FIELD_ORDER]
     + ["problems", "notes"]
 )
@@ -219,9 +238,12 @@ def results_csv(summary: BulkSummary) -> str:
             f"{f.title}" for f in report.all_findings()
             if f.status in (FAIL, WARN, UNKNOWN)
         )
+        names = report.image_names or [report.image_name]
         row = [
             report.reference,
-            report.image_name,
+            names[0] if names else "",
+            names[1] if len(names) > 1 else "",
+            len(names),
             report.beverage_display,
             "COULD NOT CHECK" if report.error else report.verdict,
             f"{report.elapsed:.2f}",

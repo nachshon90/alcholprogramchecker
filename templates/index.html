@@ -112,10 +112,17 @@ about {{ time_budget|round|int }} seconds or less.</p>
   </fieldset>
 
   <fieldset>
-    <legend>Step 3 &ndash; The label picture</legend>
+    <legend>Step 3 &ndash; The label pictures</legend>
 
+    <p>You can send <strong>one or two pictures</strong>. Many containers put
+       the brand on the front and the health warning on the back, so if your
+       product has two labels, send both and they will be checked together as
+       one container. If everything is on a single label, just send one
+       picture.</p>
+
+    <h3>Picture 1 &ndash; the front or main label</h3>
     <div class="field">
-      <label for="label_image">Picture of the label</label>
+      <label for="label_image">Choose the picture</label>
       <span class="hint">PNG, JPEG, TIFF, BMP, WEBP or GIF. A sharp picture
         taken straight on works best.</span>
       <input type="file" id="label_image" name="label_image"
@@ -123,7 +130,7 @@ about {{ time_budget|round|int }} seconds or less.</p>
     </div>
 
     <div class="field">
-      <label for="label_width_mm">How wide is the real label, in millimetres?
+      <label for="label_width_mm">How wide is this label, in millimetres?
         <span class="muted">(optional, but recommended)</span></label>
       <span class="hint">Measure the printed label with a ruler. Without this
         the tool cannot check whether the health warning letters are big
@@ -131,6 +138,25 @@ about {{ time_budget|round|int }} seconds or less.</p>
       <input type="number" id="label_width_mm" name="label_width_mm"
              min="1" max="2000" step="0.1"
              value="{{ form.get('label_width_mm','') }}">
+    </div>
+
+    <h3>Picture 2 &ndash; the back label <span class="muted">(only if you have one)</span></h3>
+    <div class="field">
+      <label for="label_image_2">Choose the picture</label>
+      <span class="hint">Leave this empty if everything is on one label.</span>
+      <input type="file" id="label_image_2" name="label_image_2"
+             accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif">
+    </div>
+
+    <div class="field">
+      <label for="label_width_mm_2">How wide is the back label, in millimetres?
+        <span class="muted">(optional)</span></label>
+      <span class="hint">Measure this label separately. Front and back labels
+        are often different sizes, so its own measurement is needed to check
+        the letter height on it.</span>
+      <input type="number" id="label_width_mm_2" name="label_width_mm_2"
+             min="1" max="2000" step="0.1"
+             value="{{ form.get('label_width_mm_2','') }}">
     </div>
 
     <div class="field">

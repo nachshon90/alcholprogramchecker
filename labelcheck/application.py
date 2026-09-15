@@ -47,6 +47,12 @@ class ApplicationData:
     label_width_mm: Optional[float] = None
     reference: str = ""          # Operator's own reference, e.g. a serial number.
     image_path: str = ""         # Used by batch runs only.
+    # A container's mandatory information is often split between a front and
+    # a back label, so a second panel can be supplied. Each panel carries its
+    # own measured width, because the two are rarely the same size and a
+    # shared figure would give a wrong type-size measurement on one of them.
+    image_path_2: str = ""
+    label_width_mm_2: Optional[float] = None
 
     # --- Derived values ---------------------------------------------------
     def declared_abv(self) -> Optional[float]:
@@ -63,6 +69,18 @@ class ApplicationData:
     def declared_ml(self) -> Optional[float]:
         parsed = parse_net_contents(self.net_contents)
         return parsed[0]["ml"] if parsed else None
+
+    def panels(self) -> List[Tuple[str, Optional[float]]]:
+        """The label pictures to scan, as (file path, measured width in mm).
+
+        Returns one entry per supplied picture. A blank second picture is
+        simply omitted rather than treated as an error - most products only
+        need one.
+        """
+        entries = [(self.image_path, self.label_width_mm)]
+        if self.image_path_2.strip():
+            entries.append((self.image_path_2, self.label_width_mm_2))
+        return [(path, width) for path, width in entries if path.strip()]
 
     def resolved_class(self) -> str:
         return rules.resolve_class(
@@ -87,7 +105,11 @@ def _alias(target: str, *names: str):
 
 
 _alias("image_path", "image", "image_path", "file", "filename", "file_name",
-       "label", "label_image", "artwork", "image_file")
+       "label", "label_image", "artwork", "image_file", "front_image",
+       "image_1", "image1", "front", "front_label")
+_alias("image_path_2", "image_2", "image2", "image_path_2", "back_image",
+       "image_back", "second_image", "back", "back_label", "back_label_image",
+       "file_2", "file2", "rear_image")
 _alias("brand_name", "brand", "brand_name", "brandname", "brand name")
 _alias("class_type", "class", "type", "class_type", "classtype",
        "class/type", "class_or_type", "fanciful_name", "product_class",
@@ -109,15 +131,18 @@ _alias("is_import", "is_import", "import", "imported", "is_imported")
 _alias("contains_sulfites", "contains_sulfites", "sulfites", "sulphites",
        "sulfite", "contains sulfites")
 _alias("label_width_mm", "label_width_mm", "label_width", "width_mm",
-       "label width mm", "physical_width_mm")
+       "label width mm", "physical_width_mm", "front_label_width_mm",
+       "label_width_mm_1")
+_alias("label_width_mm_2", "label_width_mm_2", "label_width_2",
+       "width_mm_2", "back_label_width_mm", "second_label_width_mm")
 _alias("reference", "reference", "ref", "id", "serial", "serial_number",
        "ttb_id", "record", "row_id")
 
 FIELD_NAMES = [
-    "image_path", "brand_name", "class_type", "alcohol_content",
-    "net_contents", "bottler_name", "bottler_address", "country_of_origin",
-    "beverage_class", "is_import", "contains_sulfites", "label_width_mm",
-    "reference",
+    "image_path", "image_path_2", "brand_name", "class_type",
+    "alcohol_content", "net_contents", "bottler_name", "bottler_address",
+    "country_of_origin", "beverage_class", "is_import", "contains_sulfites",
+    "label_width_mm", "label_width_mm_2", "reference",
 ]
 
 _TRUE_WORDS = {"1", "true", "yes", "y", "t", "x", "import", "imported"}
@@ -170,6 +195,8 @@ def from_mapping(row: Dict[str, object]) -> ApplicationData:
             data.contains_sulfites = _to_bool(str(value))
         elif name == "label_width_mm":
             data.label_width_mm = _to_float(str(value))
+        elif name == "label_width_mm_2":
+            data.label_width_mm_2 = _to_float(str(value))
         else:
             setattr(data, name, str(value).strip())
 
@@ -251,15 +278,18 @@ def template_csv() -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([
-        "image", "reference", "brand_name", "class_type", "alcohol_content",
-        "net_contents", "bottler_name", "bottler_address",
+        "image", "image_2", "reference", "brand_name", "class_type",
+        "alcohol_content", "net_contents", "bottler_name", "bottler_address",
         "country_of_origin", "beverage_class", "is_import",
-        "contains_sulfites", "label_width_mm",
+        "contains_sulfites", "label_width_mm", "label_width_mm_2",
     ])
+    # The second row shows a front-and-back pair. Leave image_2 blank when a
+    # product only has one label.
     writer.writerow([
-        "bourbon.png", "SKU-1001", "Old Bridge", "Kentucky Straight Bourbon Whisky",
-        "45% ABV", "750 mL", "Old Bridge Distillery",
-        "Frankfort, Kentucky", "", "distilled_spirits", "no", "", "95",
+        "bourbon_front.png", "bourbon_back.png", "SKU-1001", "Old Bridge",
+        "Kentucky Straight Bourbon Whisky", "45% ABV", "750 mL",
+        "Old Bridge Distillery", "Frankfort, Kentucky", "",
+        "distilled_spirits", "no", "", "95", "95",
     ])
     return buffer.getvalue()
 

@@ -368,3 +368,18 @@ footer.site {
   nav.main, .actions, .skip-link { display: none; }
   body { font-size: 12pt; }
 }
+
+/* Side-by-side front and back label previews. */
+.preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  align-items: flex-start;
+}
+.preview-row figure { margin: 0; flex: 0 1 auto; max-width: 100%; }
+.preview-row figcaption {
+  margin-top: .5rem;
+  font-weight: 700;
+  font-size: 1rem;
+  text-align: center;
+}

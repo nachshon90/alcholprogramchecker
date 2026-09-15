@@ -3,11 +3,15 @@
 Checks a picture of an alcohol beverage label against the product details you
 enter, and against the federal labelling rules in 27 CFR.
 
-You type in your company and product information, add a photograph or artwork
-file of the label, and the tool reads the label with on-device OCR and reports
-**match**, **mismatch**, or **missing** for every required field. It pays
-particular attention to the Government Health Warning, which has requirements
-about wording, capitalisation and physical letter size.
+You type in your company and product information, add one or two pictures of
+the label, and the tool reads them with on-device OCR and reports **match**,
+**mismatch**, or **missing** for every required field. It pays particular
+attention to the Government Health Warning, which has requirements about
+wording, capitalisation and physical letter size.
+
+Containers routinely split the mandatory information between a front and a
+back label, so you can supply **up to two pictures** and they are checked
+together as one container. One picture on its own is checked on its own.
 
 It runs entirely on your own computer. There are no cloud services, no
 accounts, and no outbound network calls.
@@ -44,14 +48,22 @@ Or just `./run.sh`, which checks both dependencies for you first.
 
 ### Checking one label
 
-Fill in the form and upload the label picture. You get a result in about half
-a second.
+Fill in the form and upload the label picture. You get a result in about a
+second.
 
-The form asks for the **label's real width in millimetres**. This is optional
+**One or two pictures.** The first picture is required; the second is
+optional. Use it when the product has a back label, which is where the
+Government Warning and the bottler's address usually sit. Text is pooled
+across both, so a field counts as present if it appears on either one. If a
+product has everything on a single label, supply just the one picture.
+
+The form asks for each **label's real width in millimetres**. This is optional
 but strongly recommended: without it the tool cannot work out how big the
 printed letters actually are, so it cannot check the health-warning type-size
-rule. Measure the printed label with a ruler. (If the image file records its
-own DPI, as scanned artwork usually does, that is used automatically.)
+rule. Measure the printed label with a ruler. Each picture has its own width
+box, because front and back labels are often different sizes and one figure
+would be wrong for the other. (If the image file records its own DPI, as
+scanned artwork usually does, that is used automatically.)
 
 ### Checking many labels at once
 
@@ -66,6 +78,11 @@ are flexible — `image`, `file`, `filename`, `label` and `artwork` all work,
 as do `brand`/`brand_name`, `abv`/`alcohol_content`, and so on. Unrecognised
 columns are ignored with a note rather than rejected, so you can feed in an
 export that carries extra bookkeeping columns.
+
+For a product with a back label, add its file name in an **`image_2`** column
+(`back_image` and `back` also work) and, if you have it, the back label's
+width in `label_width_mm_2`. Leave `image_2` empty for single-label products;
+the row is then checked against its one picture.
 
 A ready-made example is in `samples/`:
 
@@ -134,6 +151,10 @@ Cider is the interesting case: the same product is checked under Part 4 at
 ### The Government Health Warning
 
 This is the strictest check, and it is deliberately more than a text search.
+When two pictures are supplied, the tool finds whichever panel actually
+carries the warning and measures **that** panel — letter height and character
+density are physical measurements, so they cannot be taken from pooled text.
+The result page says which picture it used.
 
 The required statement is:
 
@@ -229,6 +250,35 @@ in data rather than code in `labelcheck/rules.py`, and a non-standard size is
 reported as advisory so it never hard-fails a label on a rule that may have
 moved. Re-verify the lists against the current eCFR before relying on them.
 
+### Two pictures, pooled text but separate geometry
+
+Text is pooled across panels, because a field is "on the label" if it appears
+anywhere on the container. Geometry is not pooled: `merge_results()`
+deliberately clears the millimetres-per-pixel figure, since two pictures can
+be taken at different scales and a single conversion would be wrong for at
+least one of them. Anything that measures physical size therefore runs
+against one panel.
+
+A picture that fails to load is handled by position: if the first is
+unreadable the check stops and says so, but a bad *second* picture is noted
+and skipped rather than throwing away a good first one.
+
+### Large brand names can hide the small print
+
+Tesseract sizes its noise filter against the dominant text on the page. On
+label artwork, a very large brand name can push the much smaller mandatory
+print below that threshold, so the alcohol content and net contents simply do
+not appear in the results — even though they are perfectly legible when
+cropped out and read on their own. This was not theoretical: it happened on
+the front label of the front/back sample pair.
+
+Neither contrast adjustment, upscaling, nor Tesseract's own noise-filter
+settings fixed it reliably. What does work is reading the image again in two
+overlapping horizontal bands, which puts text of a similar size together in
+each pass. That banded pass runs whenever the time budget allows, and costs
+about 0.3s. Repeated readings are harmless — matching is fuzzy — and
+identical lines are collapsed before the text is shown to the user.
+
 ### OCR is noisy, so matching is fuzzy
 
 Label artwork uses display type, letter spacing, foil and curved surfaces.
@@ -256,16 +306,21 @@ The requirement was 5 seconds or less. Measured on the sample labels:
 
 | | Time |
 | --- | --- |
-| Single label, full HTTP round trip | **0.5 – 0.9 s** |
-| Batch of 6 labels | **4.3 s total**, ~0.7 s each |
+| One picture, full HTTP round trip | **0.5 – 1.5 s** |
+| Two pictures (front and back) | **~2.2 s** |
+| Batch of 7 rows (8 pictures) | **~10 s total**, ~1.4 s a row |
 
 How the budget is held:
 
 - Images are downscaled to 2000px on the long edge before OCR, and small
   images are upscaled to at least 1000px to help with small print.
-- One sparse-text OCR pass handles display type. A second block-text pass runs
-  **only** if the health warning was not found in the first, since a dense
+- A sparse-text pass handles display type, then a banded pass recovers small
+  print a dominant brand name would otherwise hide. A third block-text pass
+  runs **only** if the health warning has still not been found, since a dense
   paragraph can be missed by a sparse model.
+- With two pictures, the OCR budget is shared between them: each panel is
+  given a fair share of the time left, so a slow first picture cannot starve
+  the second.
 - Every OCR call carries a deadline. If time runs out, results gathered so far
   are kept and the report says the check may be incomplete, rather than
   failing outright.
@@ -311,7 +366,7 @@ a single-user local tool.
 python3 -m unittest discover -s tests -v
 ```
 
-62 tests. The unit tests are pure and fast; the integration tests drive the
+78 tests. The unit tests are pure and fast; the integration tests drive the
 real OCR engine over `samples/labels/`, which contain deliberate defects:
 
 | Sample | Defect it exercises |
@@ -322,6 +377,7 @@ real OCR engine over `samples/labels/`, which contain deliberate defects:
 | `04_wine_no_warning.png` | no health warning and no sulfite declaration |
 | `05_imported_gin_no_origin.png` | imported, but no country of origin on the label |
 | `06_cider_lowercase_warning.png` | warning not in capitals; also 6.9% cider, so FDA rules |
+| `07_whiskey_front.png` + `07_whiskey_back.png` | a front/back pair: neither panel is compliant alone, both together are |
 
 The integration tests skip themselves with a clear message if Tesseract is not
 installed, and one test asserts every sample is checked inside the 5-second
@@ -357,8 +413,9 @@ tests/                     Unit and integration tests
 
 Worth being straight about:
 
-- **It reads one image.** Mandatory information spread across a separate back
-  label is not seen. Check each panel, or supply a composite image.
+- **It reads up to two pictures.** A container with mandatory information on a
+  third panel (a neck label, or a side panel) is not fully covered. Check the
+  remaining panel by eye, or supply a composite image.
 - **Bold detection is a hint**, not a determination.
 - **"Separate and apart"** (27 CFR 16.21) and contrasting-background rules
   are judgement calls a person must make.

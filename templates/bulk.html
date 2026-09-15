@@ -18,7 +18,11 @@ in Excel.</p>
 <h3>How this works</h3>
 <ol>
   <li><strong>Download the blank spreadsheet</strong> and fill in one row per
-      product. The <em>image</em> column holds the picture's file name.</li>
+      product. The <em>image</em> column holds the picture's file name. If a
+      product has a back label as well, put its file name in the
+      <em>image_2</em> column &ndash; both pictures are then checked together
+      as one container. Leave <em>image_2</em> empty for products with a
+      single label.</li>
   <li><strong>Put all the label pictures in one folder</strong>, then make a
       ZIP file of that folder.</li>
   <li><strong>Send both files</strong> using the boxes below.</li>
@@ -32,8 +36,8 @@ in Excel.</p>
     <legend>Your spreadsheet</legend>
     <div class="field">
       <label for="csv_file">The CSV file listing your products</label>
-      <span class="hint">It must have a heading row, and a column naming each
-        picture file.</span>
+      <span class="hint">It must have a heading row and an <em>image</em>
+        column. An <em>image_2</em> column for back labels is optional.</span>
       <input type="file" id="csv_file" name="csv_file" accept=".csv,text/csv" required>
     </div>
   </fieldset>

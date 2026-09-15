@@ -13,6 +13,9 @@
     <div class="sub">
       Checked as: <strong>{{ report.beverage_plain }}</strong>
       ({{ report.beverage_display }}, {{ report.authority }}).
+      {% if report.panel_count > 1 %}
+        Checked {{ report.panel_count }} pictures together as one container.
+      {% endif %}
       Took {{ '%.1f'|format(report.elapsed) }} seconds.
     </div>
   </div>
@@ -25,6 +28,14 @@
 {% for note in report.notes %}
 <div class="notice warn"><p>{{ note }}</p></div>
 {% endfor %}
+
+{% if report.warning_panel_label %}
+<div class="notice">
+  <p>The Government Health Warning was found on
+     <strong>{{ report.warning_panel_label }}</strong>, and its letter size was
+     measured on that picture.</p>
+</div>
+{% endif %}
 
 {% if not report.error %}
   {% set tally = report.counts() %}
@@ -69,10 +80,24 @@
   {% endif %}
 {% endif %}
 
-{% if thumbnail %}
-<h3>The picture you sent</h3>
-<div class="label-preview">
-  <img src="{{ thumbnail }}" alt="A small copy of the label you uploaded">
+{% set shown = thumbnails | select | list %}
+{% if shown %}
+<h3>The picture{{ '' if shown|length == 1 else 's' }} you sent</h3>
+<div class="preview-row">
+  {% for image in thumbnails %}
+    {% if image %}
+    <figure class="label-preview">
+      <img src="{{ image }}" alt="A small copy of label picture {{ loop.index }}">
+      <figcaption>
+        Picture {{ loop.index }}{% if thumbnails|length > 1 %}
+          &ndash; {{ 'front' if loop.index0 == 0 else 'back' }}{% endif %}
+        {%- if report.image_names and loop.index0 < report.image_names|length %}
+          <br><span class="small muted">{{ report.image_names[loop.index0] }}</span>
+        {%- endif %}
+      </figcaption>
+    </figure>
+    {% endif %}
+  {% endfor %}
 </div>
 {% endif %}
 

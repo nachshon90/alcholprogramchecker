@@ -23,7 +23,7 @@ from labelcheck.compare import (  # noqa: E402
     check_sulfites,
 )
 from labelcheck.findings import FAIL, PASS, UNKNOWN, WARN, worst  # noqa: E402
-from labelcheck.ocr import OcrResult, Word  # noqa: E402
+from labelcheck.ocr import OcrResult, Word, merge_results  # noqa: E402
 from labelcheck.textnorm import (  # noqa: E402
     field_match_score, parse_alcohol, parse_net_contents, token_coverage,
 )
@@ -293,6 +293,66 @@ class TestHealthWarning(unittest.TestCase):
         self.assertTrue(all(f.advisory for f in house))
 
 
+class TestMultiplePanels(unittest.TestCase):
+    """Up to two pictures per scan: a front label and an optional back."""
+
+    def test_merge_pools_text_from_every_panel(self):
+        merged = merge_results([fake_ocr("BRAND NAME"), fake_ocr("750 ML")])
+        self.assertIn("BRAND NAME", merged.text)
+        self.assertIn("750 ML", merged.text)
+
+    def test_merge_clears_physical_scale(self):
+        # Two pictures can be taken at different scales, so one conversion
+        # factor would be wrong for at least one of them.
+        first = fake_ocr("A")
+        first.mm_per_px = 0.1
+        second = fake_ocr("B")
+        second.mm_per_px = 0.4
+        self.assertIsNone(merge_results([first, second]).mm_per_px)
+
+    def test_merge_keeps_panel_lines_apart(self):
+        merged = merge_results([fake_ocr("ONE"), fake_ocr("TWO")])
+        keys = {w.line_key for w in merged.words}
+        self.assertEqual(len(keys), 2)
+
+    def test_single_result_passes_through_untouched(self):
+        only = fake_ocr("ONLY ONE")
+        self.assertIs(merge_results([only]), only)
+
+    def test_warning_located_on_the_back_panel(self):
+        front = fake_ocr("IRONWOOD BEND TENNESSEE WHISKEY")
+        back = fake_ocr(healthwarning.FULL_STATEMENT.upper())
+        findings, panel = healthwarning.check_panels(
+            [(front, None), (back, None)], volume_ml=750)
+        self.assertEqual(panel, 1)
+        self.assertFalse(any("missing" in f.title.lower() for f in findings))
+
+    def test_warning_absent_from_both_panels_is_reported_missing(self):
+        findings, panel = healthwarning.check_panels(
+            [(fake_ocr("BRAND"), None), (fake_ocr("750 ML"), None)],
+            volume_ml=750)
+        self.assertIsNone(panel)
+        self.assertEqual(findings[0].status, FAIL)
+        self.assertIn("missing", findings[0].title.lower())
+
+    def test_application_reports_one_or_two_panels(self):
+        one = from_mapping({"image_path": "front.png", "label_width_mm": "95"})
+        self.assertEqual(one.panels(), [("front.png", 95.0)])
+        two = from_mapping({"image_path": "front.png", "image_path_2": "back.png",
+                            "label_width_mm": "95", "label_width_mm_2": "80"})
+        self.assertEqual(two.panels(), [("front.png", 95.0), ("back.png", 80.0)])
+
+    def test_blank_second_image_is_simply_omitted(self):
+        record = from_mapping({"image_path": "front.png", "image_path_2": "   "})
+        self.assertEqual(len(record.panels()), 1)
+
+    def test_csv_accepts_back_image_column_aliases(self):
+        rows, _ = rows_from_csv(
+            "image,back_image,brand\nf.png,b.png,Acme\n")
+        self.assertEqual(rows[0].image_path, "f.png")
+        self.assertEqual(rows[0].image_path_2, "b.png")
+
+
 class TestApplicationData(unittest.TestCase):
     def test_template_round_trips(self):
         rows, warnings = rows_from_csv(template_csv())
@@ -391,6 +451,7 @@ class TestEndToEnd(unittest.TestCase):
         }
 
     def _report(self, filename):
+        """Check using only the row's first picture."""
         from labelcheck.checker import check_label
         app = self.rows[filename]
         data = (SAMPLES / app.image_path).read_bytes()
@@ -437,6 +498,67 @@ class TestEndToEnd(unittest.TestCase):
         report = self._report("06_cider_lowercase_warning.png")
         self.assertEqual(report.beverage_class, "fda_regulated")
 
+    def test_single_picture_is_still_checked_on_its_own(self):
+        # Supplying one picture must work exactly as before.
+        report = self._report("01_bourbon_compliant.png")
+        self.assertEqual(report.panel_count, 1)
+        self.assertEqual(report.overall, PASS)
+        self.assertIsNone(report.warning_panel_label)
+
+    def test_front_panel_alone_is_incomplete(self):
+        from labelcheck.checker import Panel, check_label
+        app = self.rows["07_whiskey_front.png"]
+        front = Panel((SAMPLES / app.image_path).read_bytes(), "front.png",
+                      app.label_width_mm)
+        report = check_label([front], app)
+        titles = " | ".join(f.title.lower() for f in report.all_findings())
+        self.assertEqual(report.overall, FAIL)
+        self.assertIn("government health warning is missing", titles)
+
+    def test_front_and_back_together_are_compliant(self):
+        from labelcheck.checker import Panel, check_label
+        app = self.rows["07_whiskey_front.png"]
+        panels = [
+            Panel((SAMPLES / path).read_bytes(), Path(path).name, width)
+            for path, width in app.panels()
+        ]
+        report = check_label(panels, app)
+        self.assertEqual(report.panel_count, 2)
+        self.assertEqual(report.overall, PASS,
+                         f"unexpected: {self._titles(report)}")
+        # The warning lives on the back label, and must be measured there.
+        self.assertEqual(report.warning_panel, 1)
+
+    def test_a_broken_second_picture_does_not_lose_the_first(self):
+        from labelcheck.checker import Panel, check_label
+        app = self.rows["01_bourbon_compliant.png"]
+        good = Panel((SAMPLES / app.image_path).read_bytes(), "good.png",
+                     app.label_width_mm)
+        broken = Panel(b"this is not an image", "broken.png", 95.0)
+        report = check_label([good, broken], app)
+        self.assertIsNone(report.error)
+        self.assertEqual(report.overall, PASS)
+        self.assertTrue(any("skipped" in n.lower() for n in report.notes))
+
+    def test_small_print_is_recovered_from_a_dominant_brand(self):
+        # A very large brand name makes Tesseract discard much smaller text
+        # as noise. The banded pass exists to recover it.
+        from labelcheck.ocr import read_label
+        result = read_label(
+            (SAMPLES / "labels" / "07_whiskey_front.png").read_bytes(),
+            label_width_mm=95)
+        self.assertIn("43%", result.text)
+        self.assertIn("750", result.text)
+
+    def test_read_text_has_no_repeated_lines(self):
+        from labelcheck.ocr import read_label
+        result = read_label(
+            (SAMPLES / "labels" / "01_bourbon_compliant.png").read_bytes(),
+            label_width_mm=95)
+        lines = [" ".join(l.split()).lower()
+                 for l in result.text.splitlines() if l.strip()]
+        self.assertEqual(len(lines), len(set(lines)))
+
     def test_every_label_is_checked_within_the_time_budget(self):
         for filename in self.rows:
             with self.subTest(label=filename):
@@ -456,10 +578,19 @@ class TestBulk(unittest.TestCase):
     def test_batch_runs_every_row(self):
         from labelcheck.bulk import results_csv, run_batch
         summary = run_batch((SAMPLES / "sample_batch.csv").read_text(), SAMPLES)
-        self.assertEqual(summary.total, 6)
+        self.assertEqual(summary.total, 7)
         self.assertEqual(summary.passed + summary.failed
-                         + summary.needs_attention, 6)
+                         + summary.needs_attention, 7)
         self.assertIn("reference,image", results_csv(summary))
+
+    def test_batch_handles_a_two_picture_row(self):
+        from labelcheck.bulk import results_csv, run_batch
+        summary = run_batch((SAMPLES / "sample_batch.csv").read_text(), SAMPLES)
+        pair = [r for r in summary.reports if r.reference == "SKU-1007"][0]
+        self.assertEqual(pair.panel_count, 2)
+        self.assertEqual(pair.overall, PASS)
+        # Both file names are recorded in the exported results.
+        self.assertIn("07_whiskey_back.png", results_csv(summary))
 
     def test_missing_image_is_reported_not_fatal(self):
         from labelcheck.bulk import run_batch

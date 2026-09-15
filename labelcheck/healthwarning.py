@@ -426,3 +426,38 @@ def check(result: OcrResult, volume_ml: Optional[float] = None,
                 ))
 
     return findings
+
+
+def check_panels(scans, volume_ml: Optional[float] = None):
+    """Check the Government Warning across every supplied panel.
+
+    The warning only ever appears on one panel, but which one varies - on
+    many containers it is on the back. Running the check against merged text
+    would be wrong, because type size and character density are physical
+    measurements that need one panel's own scale.
+
+    So we find the panel actually carrying the warning and measure that one.
+    Returns (findings, index of the panel used, or None if not found).
+
+    `scans` is a sequence of (OcrResult, PIL image or None) pairs.
+    """
+    if not scans:
+        return [], None
+
+    best_index = None
+    best_evidence = 0
+    for index, (result, _image) in enumerate(scans):
+        evidence = sum(len(line) for line in locate_warning(result))
+        if evidence > best_evidence:
+            best_evidence = evidence
+            best_index = index
+
+    if best_index is None:
+        # Not on any panel. Report against the merged text so the message is
+        # about the whole container rather than one picture of it.
+        from .ocr import merge_results
+        merged = merge_results([result for result, _ in scans])
+        return check(merged, volume_ml=volume_ml, image=None), None
+
+    result, image = scans[best_index]
+    return check(result, volume_ml=volume_ml, image=image), best_index

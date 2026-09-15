@@ -11,7 +11,7 @@ requirement - we need each word's bounding box in original-image pixels.
 """
 import io
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Tuple
 
 from PIL import Image, ImageOps
@@ -208,6 +208,49 @@ def _run_pass(prepared: Image.Image, psm: int, timeout: float) -> List[dict]:
     return rows
 
 
+def _run_banded_pass(prepared: Image.Image, psm: int, timeout: float,
+                     bands: int = 2, overlap: float = 0.15) -> List[dict]:
+    """OCR the image in overlapping horizontal bands.
+
+    Tesseract sizes its noise filter against the dominant text on the page.
+    On label artwork a very large brand name can therefore suppress the much
+    smaller mandatory print - the alcohol content and net contents simply do
+    not appear in the results, even though they are perfectly legible in
+    isolation. Splitting the image into bands puts text of a similar size
+    together in each pass and recovers it.
+
+    Bands overlap so that a line falling on a boundary is still read whole in
+    one of them. Duplicate readings are harmless: matching is fuzzy, and
+    repeated lines are collapsed for display.
+    """
+    height = prepared.height
+    step = max(1, height // bands)
+    margin = int(step * overlap)
+    collected: List[dict] = []
+    deadline = time.monotonic() + timeout
+
+    for index in range(bands):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.3:
+            break
+        top = max(0, index * step - margin)
+        bottom = min(height, (index + 1) * step + margin)
+        if bottom - top < 20:
+            continue
+        band = prepared.crop((0, top, prepared.width, bottom))
+        try:
+            rows = _run_pass(band, psm, remaining)
+        except Exception:
+            continue
+        # Band coordinates are relative to the crop; shift them back.
+        for row in rows:
+            row["top"] += top
+            row["line_key"] = (row["line_key"][0] + 500 * (index + 1),
+                               row["line_key"][1], row["line_key"][2])
+        collected.extend(rows)
+    return collected
+
+
 def _rows_to_words(rows: List[dict], scale: float, psm: int) -> List[Word]:
     inverse = 1.0 / scale if scale else 1.0
     words = []
@@ -227,15 +270,27 @@ def _rows_to_words(rows: List[dict], scale: float, psm: int) -> List[Word]:
 
 
 def _joined_text(words: List[Word]) -> str:
+    """Words assembled into lines, in reading order, without repeats.
+
+    Several passes read the same artwork, so the same line often appears more
+    than once. Duplicates do no harm to matching, but they make the "what the
+    computer read" panel confusing, so identical lines are collapsed.
+    """
     grouped: Dict[Tuple[int, int, int], List[Word]] = {}
     for word in words:
         grouped.setdefault(word.line_key, []).append(word)
     lines = []
+    seen = set()
     for key in sorted(grouped, key=lambda k: (
         min(w.top for w in grouped[k]), min(w.left for w in grouped[k])
     )):
         ordered = sorted(grouped[key], key=lambda w: w.left)
-        lines.append(" ".join(w.text for w in ordered))
+        text = " ".join(w.text for w in ordered)
+        fingerprint = " ".join(text.split()).lower()
+        if fingerprint and fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        lines.append(text)
     return "\n".join(lines)
 
 
@@ -267,6 +322,15 @@ def read_label(data: bytes, label_width_mm: Optional[float] = None,
     words.extend(_rows_to_words(rows, scale, 11))
     passes.append("sparse text (psm 11)")
 
+    # Banded pass: recovers smaller mandatory print that a dominant brand
+    # name can hide from the whole-image pass. See _run_banded_pass.
+    remaining = deadline - time.monotonic()
+    if remaining > 0.8:
+        band_rows = _run_banded_pass(prepared, 11, min(remaining - 0.3, 1.5))
+        if band_rows:
+            words.extend(_rows_to_words(band_rows, scale, 13))
+            passes.append("banded sparse text")
+
     text_so_far = _joined_text(words).lower()
     needs_second_pass = "government" not in text_so_far or "surgeon" not in text_so_far
     remaining = deadline - time.monotonic()
@@ -292,4 +356,48 @@ def read_label(data: bytes, label_width_mm: Optional[float] = None,
         elapsed=time.monotonic() - started,
         passes=passes,
         truncated=truncated,
+    )
+
+
+def merge_results(results: List[OcrResult]) -> OcrResult:
+    """Combine several panels into one result for text comparison.
+
+    A container's mandatory information is often split across a front and a
+    back label, so a field is "on the label" if it appears on any panel. This
+    merges the text for that purpose.
+
+    Geometry deliberately does NOT survive the merge: `mm_per_px` is cleared,
+    because two panels can be photographed at different scales and a single
+    conversion factor would be wrong for at least one of them. Any check that
+    measures physical size must run against an individual panel instead.
+    """
+    if not results:
+        return OcrResult(text="")
+    if len(results) == 1:
+        return results[0]
+
+    words: List[Word] = []
+    for index, result in enumerate(results):
+        for word in result.words:
+            # Namespace each panel's line keys so lines from different
+            # pictures can never be grouped into one another.
+            block, paragraph, line = word.line_key
+            words.append(replace(
+                word, line_key=(100_000 * (index + 1) + block, paragraph, line)))
+
+    passes: List[str] = []
+    for index, result in enumerate(results, start=1):
+        for name in result.passes:
+            passes.append(f"picture {index}: {name}")
+
+    return OcrResult(
+        text="\n".join(r.text for r in results if r.text),
+        words=words,
+        image_width=max(r.image_width for r in results),
+        image_height=max(r.image_height for r in results),
+        mm_per_px=None,
+        scale_source="varies by picture",
+        elapsed=sum(r.elapsed for r in results),
+        passes=passes,
+        truncated=any(r.truncated for r in results),
     )

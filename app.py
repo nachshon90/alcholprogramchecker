@@ -20,7 +20,7 @@ from labelcheck import bulk, config, security
 from labelcheck.application import (
     ApplicationData, ApplicationDataError, from_mapping, template_csv,
 )
-from labelcheck.checker import check_label
+from labelcheck.checker import Panel, check_label
 from labelcheck.findings import FAIL, PASS, UNKNOWN, WARN
 from labelcheck.ocr import OcrUnavailable, ensure_available, load_image
 from labelcheck.rules import class_choices
@@ -108,6 +108,7 @@ def _application_from_form(form) -> ApplicationData:
         "reference": form.get("reference", ""),
         "is_import": "yes" if form.get("is_import") else "no",
         "label_width_mm": form.get("label_width_mm", ""),
+        "label_width_mm_2": form.get("label_width_mm_2", ""),
     }
     sulfites = form.get("contains_sulfites", "")
     if sulfites in ("yes", "no"):
@@ -133,35 +134,47 @@ def check():
         return render_template("index.html", form=request.form,
                                engine_error=str(exc)), 503
 
-    upload = request.files.get("label_image")
-    if upload is None or not upload.filename:
-        return render_template(
-            "index.html", form=request.form,
-            error="Please choose a picture of the label to check."), 400
-
-    if not security.has_allowed_suffix(upload.filename):
-        return render_template(
-            "index.html", form=request.form,
-            error="That file type is not accepted. Please use a PNG, JPEG, "
-                  "TIFF, BMP, WEBP or GIF picture."), 400
-
-    try:
-        image_bytes = security.read_limited(upload.stream)
-    except ValueError as exc:
-        return render_template("index.html", form=request.form,
-                               error=str(exc)), 413
-
-    if not image_bytes:
-        return render_template("index.html", form=request.form,
-                               error="That file appears to be empty."), 400
-
     app_data = _application_from_form(request.form)
-    display_name = security.safe_display_name(upload.filename)
-    report = check_label(image_bytes, app_data, image_name=display_name)
+    widths = [app_data.label_width_mm, app_data.label_width_mm_2]
+
+    panels = []
+    for position, field_name in enumerate(("label_image", "label_image_2")):
+        upload = request.files.get(field_name)
+        if upload is None or not upload.filename:
+            # Only the first picture is required. A product whose mandatory
+            # information all sits on one label needs nothing further.
+            if position == 0:
+                return render_template(
+                    "index.html", form=request.form,
+                    error="Please choose a picture of the label to check."), 400
+            continue
+
+        if not security.has_allowed_suffix(upload.filename):
+            return render_template(
+                "index.html", form=request.form,
+                error=f"Picture {position + 1} is not a file type the tool "
+                      "accepts. Please use a PNG, JPEG, TIFF, BMP, WEBP or "
+                      "GIF picture."), 400
+
+        try:
+            data = security.read_limited(upload.stream)
+        except ValueError as exc:
+            return render_template("index.html", form=request.form,
+                                   error=f"Picture {position + 1}: {exc}"), 413
+
+        if not data:
+            return render_template(
+                "index.html", form=request.form,
+                error=f"Picture {position + 1} appears to be empty."), 400
+
+        panels.append(Panel(data, security.safe_display_name(upload.filename),
+                            widths[position]))
+
+    report = check_label(panels, app_data)
 
     return render_template(
         "result.html", report=report, app_data=app_data,
-        thumbnail=_thumbnail(image_bytes),
+        thumbnails=[_thumbnail(p.data) for p in panels],
     )
 
 

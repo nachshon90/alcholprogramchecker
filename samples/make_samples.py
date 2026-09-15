@@ -305,6 +305,38 @@ SPECS = [
 ]
 
 
+# Front-and-back pairs. Real containers routinely split the mandatory
+# information across two labels: branding on the front, and the bottler's
+# name, address and the Government Warning on the back. Neither panel is
+# compliant alone; together they are.
+PAIRS = [
+    dict(
+        reference="SKU-1007",
+        front=dict(
+            name="07_whiskey_front.png", width_mm=95, height_mm=105,
+            brand="Ironwood Bend", brand_cap_mm=9,
+            class_type="Tennessee Whiskey", alcohol="43% ALC/VOL",
+            net_contents="750 mL", bottler="", address="",
+            include_warning=False,
+        ),
+        back=dict(
+            name="07_whiskey_back.png", width_mm=95, height_mm=95,
+            brand="", brand_cap_mm=6, class_type="", alcohol="",
+            net_contents="", bottler="Ironwood Bend Distilling Co.",
+            address="Nashville, Tennessee", warning_cap_mm=2.2,
+        ),
+        app=dict(
+            brand_name="Ironwood Bend", class_type="Tennessee Whiskey",
+            alcohol_content="43% ABV", net_contents="750 mL",
+            bottler_name="Ironwood Bend Distilling Co.",
+            bottler_address="Nashville, Tennessee",
+            beverage_class="distilled_spirits",
+            label_width_mm=95, label_width_mm_2=95,
+        ),
+    ),
+]
+
+
 def main():
     out_dir = HERE / "labels"
     out_dir.mkdir(exist_ok=True)
@@ -318,10 +350,21 @@ def main():
         print(f"wrote {path.relative_to(HERE.parent)}")
         rows.append({"image": f"labels/{name}", "reference": reference, **app})
 
-    columns = ["image", "reference", "brand_name", "class_type",
+    for pair in PAIRS:
+        entry = {"reference": pair["reference"], **pair["app"]}
+        for side in ("front", "back"):
+            spec = dict(pair[side])
+            name = spec.pop("name")
+            make_label(out_dir / name, **spec)
+            print(f"wrote {(out_dir / name).relative_to(HERE.parent)}")
+            entry["image" if side == "front" else "image_2"] = f"labels/{name}"
+        rows.append(entry)
+
+    columns = ["image", "image_2", "reference", "brand_name", "class_type",
                "alcohol_content", "net_contents", "bottler_name",
                "bottler_address", "country_of_origin", "beverage_class",
-               "is_import", "contains_sulfites", "label_width_mm"]
+               "is_import", "contains_sulfites", "label_width_mm",
+               "label_width_mm_2"]
     csv_path = HERE / "sample_batch.csv"
     with csv_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns)
