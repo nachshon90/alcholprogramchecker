@@ -1,5 +1,7 @@
 # Alcohol Label Compliance Checker
 
+[![Tests](https://github.com/nachshon90/alcholprogramchecker/actions/workflows/tests.yml/badge.svg)](https://github.com/nachshon90/alcholprogramchecker/actions/workflows/tests.yml)
+
 Checks a picture of an alcohol beverage label against the product details you
 enter, and against the federal labelling rules in 27 CFR.
 
@@ -15,6 +17,53 @@ together as one container. One picture on its own is checked on its own.
 
 It runs entirely on your own computer. There are no cloud services, no
 accounts, and no outbound network calls.
+
+---
+
+## For reviewers: the fastest way to see it work
+
+Copy and paste this block. It installs everything, runs the full test suite,
+and starts the tool.
+
+```bash
+# 1. The OCR engine (a separate program, not a Python package)
+sudo apt-get install -y tesseract-ocr      # macOS: brew install tesseract
+
+# 2. The code
+git clone https://github.com/nachshon90/alcholprogramchecker.git
+cd alcholprogramchecker
+git checkout AlcholProgram                 # not needed once this is merged
+
+# 3. Python packages
+pip3 install -r requirements.txt
+
+# 4. Prove it works: 101 tests, including real OCR over the sample labels
+python3 -m unittest discover -s tests
+
+# 5. Start it
+./run.sh                                   # Windows: python app.py
+```
+
+Then open <http://127.0.0.1:5000>.
+
+**Try it straight away** using the labels in `samples/labels/`, which each
+carry a deliberate defect:
+
+| Upload this | Enter this width | You should see |
+| --- | --- | --- |
+| `01_bourbon_compliant.png` | 95 | PASS |
+| `02_wine_abv_mismatch.png` | 100 | alcohol content crosses the 14% tax line |
+| `03_beer_tiny_warning.png` | 90 | health warning letters too small |
+| `04_wine_no_warning.png` | 100 | health warning missing, sulfites missing |
+| `05_imported_gin_no_origin.png` | 95 | country of origin missing |
+| `07_whiskey_front.png` **and** `07_whiskey_back.png` | 95 and 95 | PASS, warning found on picture 2 |
+
+The matching product details for each are in `samples/sample_batch.csv`. For
+the batch mode, upload that CSV and point the folder box at the `samples`
+directory.
+
+If Tesseract is missing, the tool still starts but every page tells you so
+and how to install it. It never silently returns a wrong answer.
 
 ---
 
@@ -366,8 +415,21 @@ a single-user local tool.
 python3 -m unittest discover -s tests -v
 ```
 
-78 tests. The unit tests are pure and fast; the integration tests drive the
-real OCR engine over `samples/labels/`, which contain deliberate defects:
+101 tests, run automatically on every push and pull request by
+`.github/workflows/tests.yml` against Python 3.9 and 3.12. CI installs the
+real Tesseract engine and fails the build if it is missing, so the OCR tests
+cannot silently skip and report a hollow green tick.
+
+They come in three layers:
+
+- **Unit tests** — pure and fast: parsing, tolerances, classification,
+  path confinement, CSV safety.
+- **Integration tests** — drive the real OCR engine over `samples/labels/`.
+- **Web tests** (`tests/test_web.py`) — drive the Flask app through its test
+  client, covering every route, template, upload rejection and the batch
+  download. These catch broken templates that unit tests cannot.
+
+The sample labels carry deliberate defects:
 
 | Sample | Defect it exercises |
 | --- | --- |
