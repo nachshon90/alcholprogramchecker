@@ -26,11 +26,6 @@ Checks a photo of an alcohol beverage label against the application details and 
 - **Plain-English verdicts:** every check returns **match**, **problem**, **check by hand**, or **cannot check**, in a large-type, high-contrast interface.
 - **Private by design:** OCR runs on your own device. No cloud services, no accounts, and no network calls while checking.
 
-``
-```
-
----
-
 ## Try it in two minutes
 
 The repo includes seven sample labels in [`samples/labels/`](samples/labels/), each built with a deliberate defect, and their matching application data in [`samples/sample_batch.csv`](samples/sample_batch.csv).
