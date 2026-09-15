@@ -63,3 +63,73 @@ jobs:
         run: |
           cp -r samples "${RUNNER_TEMP}/samples-check"
           cd "${RUNNER_TEMP}/samples-check" && python make_samples.py
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t label-checker:ci .
+
+      # The image must not start an unprotected public service, so a run with
+      # no password is expected to fail. If it succeeds, that is the bug.
+      - name: Refuses to start without a password
+        run: |
+          if docker run --rm label-checker:ci; then
+            echo "FAIL: the image started with no password set"
+            exit 1
+          fi
+          echo "OK: refused to start without a password"
+
+      - name: Starts, serves, and demands the password
+        env:
+          PW: ci-test-password-1234
+        run: |
+          docker run -d --name checker -p 8080:8080 \
+            -e LABELCHECK_PASSWORD="$PW" label-checker:ci
+
+          echo "Waiting for the health check..."
+          for _ in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:8080/healthz >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/healthz || {
+            echo "FAIL: never became healthy"; docker logs checker; exit 1; }
+
+          anonymous=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)
+          [ "$anonymous" = "401" ] || {
+            echo "FAIL: anonymous request returned $anonymous, expected 401"
+            docker logs checker; exit 1; }
+          echo "OK: anonymous request refused"
+
+          authorised=$(curl -s -o /dev/null -u "x:$PW" \
+            -w '%{http_code}' http://127.0.0.1:8080/)
+          [ "$authorised" = "200" ] || {
+            echo "FAIL: authorised request returned $authorised, expected 200"
+            docker logs checker; exit 1; }
+          echo "OK: authorised request served"
+
+          # Prove OCR really works inside the image, not just that it boots.
+          verdict=$(curl -s -u "x:$PW" -X POST http://127.0.0.1:8080/check \
+            -F "brand_name=Old Bridge" \
+            -F "class_type=Kentucky Straight Bourbon Whiskey" \
+            -F "alcohol_content=45% ABV" -F "net_contents=750 mL" \
+            -F "bottler_name=Old Bridge Distillery" \
+            -F "bottler_address=Frankfort, Kentucky" \
+            -F "label_width_mm=95" \
+            -F "label_image=@samples/labels/01_bourbon_compliant.png")
+          echo "$verdict" | grep -q "PASS - everything matches" || {
+            echo "FAIL: a known-good label did not pass inside the container"
+            docker logs checker; exit 1; }
+          echo "OK: a known-good label passed inside the container"
+
+      - name: Container logs
+        if: always()
+        run: docker logs checker || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f checker || true

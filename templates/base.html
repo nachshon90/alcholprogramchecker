@@ -33,9 +33,17 @@
 </main>
 <footer class="site">
   <div class="wrap">
+    {% if hosted %}
+    <p><strong>This copy runs on a server, not on your computer.</strong> Your
+       label pictures and company details are sent over the internet to that
+       server to be checked. They are not saved to any file or database and
+       are discarded as soon as the check finishes, but they do leave your
+       machine. For fully private checking, run the tool on your own computer.</p>
+    {% else %}
     <p><strong>Everything runs on this computer.</strong> Your label pictures
        and company details are never sent over the internet, and nothing is
        saved after you close the page.</p>
+    {% endif %}
     <p class="small">This tool is a checking aid. It does not replace review
        by a qualified person, and it is not an official government decision.</p>
   </div>

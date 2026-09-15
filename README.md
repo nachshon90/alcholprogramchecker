@@ -37,7 +37,7 @@ git checkout AlcholProgram                 # not needed once this is merged
 # 3. Python packages
 pip3 install -r requirements.txt
 
-# 4. Prove it works: 101 tests, including real OCR over the sample labels
+# 4. Prove it works: 119 tests, including real OCR over the sample labels
 python3 -m unittest discover -s tests
 
 # 5. Start it
@@ -403,9 +403,102 @@ The approach is to not hold sensitive data in the first place.
   anything), `nosniff`, `DENY` framing, `no-referrer`, and `no-store`.
 - **Binds to 127.0.0.1** by default, and runs with the debugger off.
 
-If you put this on a shared address, put it behind a real WSGI server
-(`waitress` or `gunicorn`) and an authenticating reverse proxy. It is built as
-a single-user local tool.
+---
+
+## Hosting it on a public URL
+
+The tool is designed to run on your own machine, and that is how it should be
+used when the artwork matters. Hosting it is supported, but be clear about
+what changes:
+
+> **Hosting weakens the privacy guarantee.** Label pictures and company
+> details leave your computer and travel to a server you do not control.
+> They are still never written to disk and are discarded as soon as a check
+> finishes, but "nothing leaves this computer" stops being true. The hosted
+> pages say so in the footer rather than repeating the local promise.
+
+### What hosting turns on
+
+`wsgi.py` is the production entry point, and it behaves differently from
+`app.py` on purpose:
+
+- **It refuses to start without a password**, and refuses one shorter than 12
+  characters. An open OCR endpoint on the public internet is not something to
+  leave running by accident, so this fails loudly instead of starting
+  insecurely.
+- **Every page requires that password** (HTTP Basic), compared in constant
+  time so it cannot be guessed through response timing. Only `/healthz` is
+  open, because hosts probe it to decide whether the instance is alive.
+- **Requests are rate limited** per address, since OCR is CPU-heavy and an
+  open endpoint is an easy target. Defaults to 40 checks per 5 minutes.
+- **HSTS** is sent over HTTPS, and `LABELCHECK_BEHIND_PROXY=1` makes the app
+  read the real client address and scheme from the proxy in front of it.
+- **Waitress** serves it, not the Flask development server.
+
+None of this affects a local run. With no password set, the guards are
+inactive and the experience is exactly as before.
+
+### Deploying to Render
+
+The repository includes `render.yaml`, so Render can read the whole setup:
+
+1. Push this branch to GitHub.
+2. In Render, choose **New → Blueprint** and point it at the repository.
+3. Set `LABELCHECK_PASSWORD` in the dashboard to a long random value. It is
+   deliberately marked `sync: false` so the password is never committed.
+4. Deploy.
+
+### Deploying to any Docker host
+
+```bash
+docker build -t label-checker .
+docker run -p 8080:8080 \
+  -e LABELCHECK_PASSWORD="choose-a-long-random-password" \
+  -e LABELCHECK_BEHIND_PROXY=1 \
+  label-checker
+```
+
+The `Dockerfile` installs the Tesseract engine, which is the usual reason a
+naive deployment of this app fails: a plain Python buildpack installs the
+`pytesseract` wrapper and nothing for it to wrap. The image runs as an
+unprivileged user and carries a health check.
+
+CI builds this image on every push and proves it refuses to start without a
+password, demands the password when it has one, and correctly passes a
+known-good label through OCR inside the container.
+
+### Two things that will bite you
+
+- **Run exactly one instance, one process.** Batch results live in that
+  process's memory for ten minutes so the download button does not have to
+  re-run the whole batch. With several workers a download often lands on a
+  worker that has never seen those results and returns "expired". Waitress
+  handles concurrency with threads inside one process, which is what this
+  design needs. Do not put it behind a multi-worker gunicorn, and keep
+  `numInstances: 1`.
+- **Free tiers are usually too small.** OCR on a large image needs a few
+  hundred megabytes. A 256 MB free instance will be killed mid-check. Use a
+  paid instance with at least 512 MB.
+
+### Settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LABELCHECK_PASSWORD` | *(none)* | Required to host. Turns on all the guards above. |
+| `LABELCHECK_BEHIND_PROXY` | off | Trust `X-Forwarded-*` from the proxy in front. |
+| `PORT` | 8080 | Port to listen on; most hosts set this for you. |
+| `LABELCHECK_THREADS` | 4 | Concurrent requests served. |
+| `LABELCHECK_RATE_MAX` | 40 | Checks allowed per address per window. |
+| `LABELCHECK_RATE_WINDOW` | 300 | Rate-limit window, in seconds. |
+| `LABELCHECK_TIME_BUDGET` | 5.0 | Seconds allowed per label. |
+
+### What hosting does not add
+
+There is no user accounts system, no audit log and no per-user separation:
+everyone with the password shares one service. That is appropriate for a
+small review team behind a single shared password, and not appropriate for
+handling other companies' confidential artwork at scale. For that, run local
+copies.
 
 ---
 
@@ -415,7 +508,7 @@ a single-user local tool.
 python3 -m unittest discover -s tests -v
 ```
 
-101 tests, run automatically on every push and pull request by
+119 tests, run automatically on every push and pull request by
 `.github/workflows/tests.yml` against Python 3.9 and 3.12. CI installs the
 real Tesseract engine and fails the build if it is missing, so the OCR tests
 cannot silently skip and report a hollow green tick.
@@ -428,6 +521,9 @@ They come in three layers:
 - **Web tests** (`tests/test_web.py`) — drive the Flask app through its test
   client, covering every route, template, upload rejection and the batch
   download. These catch broken templates that unit tests cannot.
+- **Hosting tests** (`tests/test_hosting.py`) — the password, the rate limit,
+  the open health check, the honest hosted footer, and that `wsgi.py` really
+  does refuse to start unprotected.
 
 The sample labels carry deliberate defects:
 
@@ -450,8 +546,11 @@ budget.
 ## Layout
 
 ```
-app.py                     Flask routes and server startup
+app.py                     Flask routes, and the local server entry point
+wsgi.py                    Production entry point for a hosted deployment
 run.sh                     Dependency check, then start
+Dockerfile                 Image that includes the Tesseract engine
+render.yaml                Deployment blueprint for Render
 labelcheck/
   config.py                Limits, time budgets, feature flags
   rules.py                 Per-beverage CFR rules, tolerances, field matrix
@@ -463,6 +562,7 @@ labelcheck/
   application.py           Application data, CSV loading, optional TTB lookup
   bulk.py                  Batch runner and results export
   security.py              Upload validation, path confinement, CSV safety
+  hosting.py               Password, rate limit, proxy support (hosted only)
   findings.py              One finding: check, verdict, plain-English text
 templates/  static/        Large-type, high-contrast interface
 samples/make_samples.py    Generates the test artwork

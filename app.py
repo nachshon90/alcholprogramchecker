@@ -16,7 +16,7 @@ from typing import Dict, Optional, Tuple
 
 from flask import Flask, Response, abort, render_template, request, send_file
 
-from labelcheck import bulk, config, security
+from labelcheck import bulk, config, hosting, security
 from labelcheck.application import (
     ApplicationData, ApplicationDataError, from_mapping, template_csv,
 )
@@ -60,11 +60,34 @@ def _expire_results() -> None:
         _RESULTS.pop(token, None)
 
 
+# Behind a reverse proxy (any hosted deployment) the real client address and
+# HTTPS status arrive as headers. Opt in explicitly, because those headers can
+# be forged by anyone talking to the app directly.
+if os.environ.get("LABELCHECK_BEHIND_PROXY", "").strip().lower() in {"1", "true", "yes"}:
+    hosting.trust_proxy(app)
+
+
+@app.before_request
+def require_password():
+    """Password-protect everything when hosted. No-op for a local run."""
+    if request.endpoint == "healthz":
+        return None
+    return hosting.check_password()
+
+
 @app.after_request
 def apply_security_headers(response: Response) -> Response:
     for header, value in security.SECURITY_HEADERS.items():
         response.headers[header] = value
+    for header, value in hosting.extra_headers(request.is_secure).items():
+        response.headers[header] = value
     return response
+
+
+@app.route("/healthz")
+def healthz():
+    """Liveness probe for the host. Deliberately outside the password."""
+    return {"status": "ok"}, 200
 
 
 @app.context_processor
@@ -73,6 +96,10 @@ def inject_globals():
         "beverage_choices": class_choices(),
         "PASS": PASS, "FAIL": FAIL, "WARN": WARN, "UNKNOWN": UNKNOWN,
         "time_budget": config.TIME_BUDGET_SECONDS,
+        # Drives the footer wording. The local promise that nothing leaves
+        # the computer is simply untrue on a hosted copy, so the pages must
+        # not keep making it.
+        "hosted": hosting.is_public_mode(),
     }
 
 
@@ -127,6 +154,7 @@ def index():
 
 
 @app.route("/check", methods=["POST"])
+@hosting.rate_limited
 def check():
     try:
         ensure_available()
@@ -189,6 +217,7 @@ def bulk_form():
 
 
 @app.route("/bulk", methods=["POST"])
+@hosting.rate_limited
 def bulk_run():
     try:
         ensure_available()
@@ -281,6 +310,8 @@ def server_error(_error):
 
 
 if __name__ == "__main__":
+    # Local development entry point. For a hosted deployment use wsgi.py,
+    # which runs a production server and insists on a password.
     host = os.environ.get("LABELCHECK_HOST", "127.0.0.1")
     port = int(os.environ.get("LABELCHECK_PORT", "5000"))
     print("=" * 68)
