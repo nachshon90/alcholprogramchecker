@@ -15,7 +15,6 @@ Checks a photo of an alcohol beverage label against the application details and 
 
 </div>
 
----
 
 ## At a glance
 
