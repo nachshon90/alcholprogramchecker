@@ -27,12 +27,7 @@ Checks a photo of an alcohol beverage label against the application details and 
 - **Plain-English verdicts:** every check returns **match**, **problem**, **check by hand**, or **cannot check**, in a large-type, high-contrast interface.
 - **Private by design:** OCR runs on your own device. No cloud services, no accounts, and no network calls while checking.
 
-```mermaid
-flowchart LR
-    A[Product details] --> C[On-device OCR]
-    B[1 or 2 label photos] --> C
-    C --> D[Compare with details and 27 CFR rules]
-    D --> E[Verdict for every field]
+``
 ```
 
 ---
