@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check many labels &ndash; Alcohol Label Compliance Checker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the main part of this page</a>
+<header class="site">
+  <div class="wrap">
+    <h1>Alcohol Label Compliance Checker</h1>
+    <p>Compares your label picture with the details you entered, and checks
+       federal labelling rules.</p>
+  </div>
+</header>
+<nav class="main" aria-label="Main">
+  <ul>
+    <li><a href="index.html">Check one label</a></li>
+    <li><a href="bulk.html" aria-current="page">Check many labels</a></li>
+    <li><a href="help.html">Help</a></li>
+  </ul>
+</nav>
+
+<main id="main" class="wrap">
+<div id="setup">
+  <h2>Check many labels at once</h2>
+  <p class="lead">Give the tool a spreadsheet listing your products, plus the
+  label pictures. It checks every row and gives you a results file you can
+  open in Excel.</p>
+
+  <h3>How this works</h3>
+  <ol>
+    <li><strong>Download the blank spreadsheet</strong> and fill in one row per
+        product. The <em>image</em> column holds the picture's file name. If a
+        product has a back label, put its file name in <em>image_2</em>.</li>
+    <li><strong>Choose the spreadsheet</strong> below.</li>
+    <li><strong>Choose all the label pictures</strong> together. They are
+        matched to the rows by file name.</li>
+  </ol>
+
+  <p><button type="button" class="button secondary" id="template">
+     Download the blank spreadsheet</button></p>
+
+  <div id="error" class="notice error" hidden><p></p></div>
+
+  <form id="bulk-form">
+    <fieldset>
+      <legend>Your spreadsheet</legend>
+      <div class="field">
+        <label for="csvFile">The CSV file listing your products</label>
+        <span class="hint">It must have a heading row and an <em>image</em>
+          column. An <em>image_2</em> column for back labels is optional.</span>
+        <input type="file" id="csvFile" accept=".csv,text/csv" required>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Your label pictures</legend>
+      <div class="field">
+        <label for="imageFiles">All the label pictures</label>
+        <span class="hint">Select them all at once. Hold Ctrl (or Command on a
+          Mac) to pick more than one.</span>
+        <input type="file" id="imageFiles" multiple
+               accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif" required>
+      </div>
+    </fieldset>
+    <div class="actions">
+      <button type="submit" id="submit">Check all these labels</button>
+    </div>
+  </form>
+
+  <div class="notice">
+    <p><strong>Nothing is uploaded.</strong> Your spreadsheet and pictures stay
+    on this device. All the checking happens inside your web browser.</p>
+  </div>
+</div>
+
+<div id="progress" class="progress" hidden>
+  <p class="what">Checking your labels&hellip;</p>
+  <p id="progress-detail" class="small muted">Starting up</p>
+  <div class="bar"><span id="progress-bar"></span></div>
+</div>
+
+<div id="results" hidden></div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><strong>Everything runs in your web browser.</strong> Your label
+       pictures and company details are never sent over the internet, and
+       nothing is saved after you close the page.</p>
+  </div>
+</footer>
+
+<script src="vendor/tesseract/tesseract.min.js"></script>
+<script type="module" src="js/bulk.js"></script>
+</body>
+</html>

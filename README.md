@@ -1,5 +1,7 @@
 # Alcohol Label Compliance Checker
 
+[![Tests](https://github.com/nachshon90/alcholprogramchecker/actions/workflows/tests.yml/badge.svg)](https://github.com/nachshon90/alcholprogramchecker/actions/workflows/tests.yml)
+
 Checks a picture of an alcohol beverage label against the product details you
 enter, and against the federal labelling rules in 27 CFR.
 
@@ -15,6 +17,116 @@ together as one container. One picture on its own is checked on its own.
 
 It runs entirely on your own computer. There are no cloud services, no
 accounts, and no outbound network calls.
+
+There are two builds of the same checker:
+
+| Build | Where it runs | Speed | Needs |
+| --- | --- | --- | --- |
+| **`web/` &ndash; static page** | Entirely in your browser, using WebAssembly OCR | ~3&ndash;4 s a label | Nothing. Open it, or host it free anywhere |
+| **Python app** | A local server, using native Tesseract | ~0.5&ndash;1.5 s a label | Python and Tesseract installed |
+
+Both apply the same rules, and a parity test checks they agree. Use the
+static page if you want a public URL or no installation; use the Python app
+if you want the fastest checking or the batch CSV tooling.
+
+---
+
+## The static page (no installation, free to host)
+
+`web/` is a complete browser-only version. There is no server: the OCR engine
+is Tesseract compiled to WebAssembly, vendored into the repository, and it
+runs in the visitor's browser. **Label pictures never leave the device**, so
+this restores the privacy guarantee that hosting the server build would give
+up.
+
+### Try it locally
+
+```bash
+cd web && python3 -m http.server 8099
+```
+
+Then open <http://127.0.0.1:8099>. No installation, no Tesseract, no Python
+packages.
+
+### Publish it free
+
+- **GitHub Pages** &ndash; `.github/workflows/pages.yml` publishes `web/` on
+  every push to `main`. Turn it on once under **Settings → Pages → Source:
+  GitHub Actions**. Your URL becomes
+  `https://<username>.github.io/alcholprogramchecker/`.
+- **Render, Netlify, Cloudflare Pages, GitLab Pages** &ndash; all free for
+  static sites. Publish directory: `web`, build command: none.
+  `render.yaml` already declares the static service.
+
+### What to know about it
+
+- **First load is about 7 MB** (the OCR engine and the English model). After
+  that the browser caches it and checks are quick.
+- **It is slower than the Python build**: roughly 3&ndash;4 seconds a label
+  against 0.5&ndash;1.5, because WebAssembly OCR cannot use native code. Still
+  inside the 5-second budget.
+- **The batch CSV mode works too**: choose the spreadsheet and then all the
+  pictures together, and they are matched by file name.
+- **No cookies, no storage, no network requests while checking.** Everything
+  the page needs is served from the same site.
+- The vendored libraries and their licences are listed in
+  `web/vendor/README.md`.
+
+### Two implementations, kept honest
+
+The compliance logic now exists twice: `labelcheck/` in Python and `web/js/`
+in JavaScript. Two copies that quietly disagree would be worse than having
+one, so `tests/parity.mjs` runs the same inputs through both - parsing,
+fuzzy-match scores, beverage classification, tolerances and type-size tiers -
+and fails on any difference. It runs in CI. Python remains the reference
+implementation, with the larger test suite.
+
+---
+
+## For reviewers: the fastest way to see it work
+
+Copy and paste this block. It installs everything, runs the full test suite,
+and starts the tool.
+
+```bash
+# 1. The OCR engine (a separate program, not a Python package)
+sudo apt-get install -y tesseract-ocr      # macOS: brew install tesseract
+
+# 2. The code
+git clone https://github.com/nachshon90/alcholprogramchecker.git
+cd alcholprogramchecker
+git checkout AlcholProgram                 # not needed once this is merged
+
+# 3. Python packages
+pip3 install -r requirements.txt
+
+# 4. Prove it works: 119 tests, including real OCR over the sample labels
+python3 -m unittest discover -s tests
+
+# 5. Start it
+./run.sh                                   # Windows: python app.py
+```
+
+Then open <http://127.0.0.1:5000>.
+
+**Try it straight away** using the labels in `samples/labels/`, which each
+carry a deliberate defect:
+
+| Upload this | Enter this width | You should see |
+| --- | --- | --- |
+| `01_bourbon_compliant.png` | 95 | PASS |
+| `02_wine_abv_mismatch.png` | 100 | alcohol content crosses the 14% tax line |
+| `03_beer_tiny_warning.png` | 90 | health warning letters too small |
+| `04_wine_no_warning.png` | 100 | health warning missing, sulfites missing |
+| `05_imported_gin_no_origin.png` | 95 | country of origin missing |
+| `07_whiskey_front.png` **and** `07_whiskey_back.png` | 95 and 95 | PASS, warning found on picture 2 |
+
+The matching product details for each are in `samples/sample_batch.csv`. For
+the batch mode, upload that CSV and point the folder box at the `samples`
+directory.
+
+If Tesseract is missing, the tool still starts but every page tells you so
+and how to install it. It never silently returns a wrong answer.
 
 ---
 
@@ -354,9 +466,166 @@ The approach is to not hold sensitive data in the first place.
   anything), `nosniff`, `DENY` framing, `no-referrer`, and `no-store`.
 - **Binds to 127.0.0.1** by default, and runs with the debugger off.
 
-If you put this on a shared address, put it behind a real WSGI server
-(`waitress` or `gunicorn`) and an authenticating reverse proxy. It is built as
-a single-user local tool.
+---
+
+## Hosting it on a public URL
+
+The tool is designed to run on your own machine, and that is how it should be
+used when the artwork matters. Hosting it is supported, but be clear about
+what changes:
+
+> **Hosting weakens the privacy guarantee.** Label pictures and company
+> details leave your computer and travel to a server you do not control.
+> They are still never written to disk and are discarded as soon as a check
+> finishes, but "nothing leaves this computer" stops being true. The hosted
+> pages say so in the footer rather than repeating the local promise.
+
+### What hosting turns on
+
+`wsgi.py` is the production entry point, and it behaves differently from
+`app.py` on purpose:
+
+- **It refuses to start without a password**, and refuses one shorter than 12
+  characters. An open OCR endpoint on the public internet is not something to
+  leave running by accident, so this fails loudly instead of starting
+  insecurely.
+- **Every page requires that password** (HTTP Basic), compared in constant
+  time so it cannot be guessed through response timing. Only `/healthz` is
+  open, because hosts probe it to decide whether the instance is alive.
+- **Requests are rate limited** per address, since OCR is CPU-heavy and an
+  open endpoint is an easy target. Defaults to 40 checks per 5 minutes.
+- **HSTS** is sent over HTTPS, and `LABELCHECK_BEHIND_PROXY=1` makes the app
+  read the real client address and scheme from the proxy in front of it.
+- **Waitress** serves it, not the Flask development server.
+
+None of this affects a local run. With no password set, the guards are
+inactive and the experience is exactly as before.
+
+### Choosing a host
+
+OCR is CPU-bound, which is the only thing that really constrains the choice.
+A host with a fraction of a core will run checks many times slower than the
+half-second you see locally.
+
+| Host | Cost | Notes |
+| --- | --- | --- |
+| **Hugging Face Spaces** | Free | Runs Docker on real cores. No code changes. Easiest free option. |
+| **Google Cloud Run** | Free tier | Scales to zero, so you pay nothing when idle. Needs a Google Cloud account. |
+| **Render** | Paid from ~$7/mo | Blueprint included. The free instance works but has roughly a tenth of a core, so checks are slow and it sleeps when idle. |
+| **Your own machine** | Free | Fastest and fully private. No hosting needed. |
+
+**A static host cannot run the Python build**, because static hosting serves
+files only. That is exactly what the browser-only build in `web/` is for: see
+[The static page](#the-static-page-no-installation-free-to-host) above, which
+is free on any static host and keeps the pictures on the visitor's device.
+
+### Deploying free to Hugging Face Spaces
+
+1. Create a Space at <https://huggingface.co/new-space>, choosing
+   **Docker → Blank** as the SDK.
+2. In the Space's **Settings → Variables and secrets**, add a secret:
+   `LABELCHECK_PASSWORD`, set to a long random value. The app refuses to
+   start without it, so this step is not optional.
+3. Publish:
+
+   ```bash
+   ./deploy/huggingface/publish.sh <your-hf-username>
+   ```
+
+   The script exports the committed tree, swaps in the Space's own README
+   (its YAML header is how a Space is configured), and pushes. It never
+   stores or echoes your token.
+
+Your URL will be `https://<username>-alcohol-label-checker.hf.space`. The
+first build takes a few minutes while Tesseract is installed.
+
+### Deploying free to Google Cloud Run
+
+```bash
+gcloud run deploy alcohol-label-checker \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --cpu 1 \
+  --max-instances 1 \
+  --set-env-vars LABELCHECK_BEHIND_PROXY=1 \
+  --set-secrets LABELCHECK_PASSWORD=labelcheck-password:latest
+```
+
+`--allow-unauthenticated` refers to Google's own IAM layer; the app's own
+password still applies. Keep `--max-instances 1`, for the reason in the
+warning below. Create the secret first with:
+
+```bash
+printf '%s' 'choose-a-long-random-password' \
+  | gcloud secrets create labelcheck-password --data-file=-
+```
+
+### Deploying to Render
+
+The repository includes `render.yaml`, so Render can read the whole setup:
+
+1. Push this branch to GitHub.
+2. In Render, choose **New → Blueprint** and point it at the repository.
+3. Set `LABELCHECK_PASSWORD` in the dashboard to a long random value. It is
+   deliberately marked `sync: false` so the password is never committed.
+4. Deploy.
+
+To try Render's free instance first, change `plan: starter` to `plan: free`
+in `render.yaml`. Expect slow checks and a cold start of up to a minute.
+
+### Deploying to any Docker host
+
+```bash
+docker build -t label-checker .
+docker run -p 8080:8080 \
+  -e LABELCHECK_PASSWORD="choose-a-long-random-password" \
+  -e LABELCHECK_BEHIND_PROXY=1 \
+  label-checker
+```
+
+The `Dockerfile` installs the Tesseract engine, which is the usual reason a
+naive deployment of this app fails: a plain Python buildpack installs the
+`pytesseract` wrapper and nothing for it to wrap. The image runs as an
+unprivileged user and carries a health check.
+
+CI builds this image on every push and proves it refuses to start without a
+password, demands the password when it has one, and correctly passes a
+known-good label through OCR inside the container.
+
+### Two things that will bite you
+
+- **Run exactly one instance, one process.** Batch results live in that
+  process's memory for ten minutes so the download button does not have to
+  re-run the whole batch. With several workers a download often lands on a
+  worker that has never seen those results and returns "expired". Waitress
+  handles concurrency with threads inside one process, which is what this
+  design needs. Do not put it behind a multi-worker gunicorn, and keep
+  `numInstances: 1`.
+- **Free tiers are usually too small.** OCR on a large image needs a few
+  hundred megabytes. A 256 MB free instance will be killed mid-check. Use a
+  paid instance with at least 512 MB.
+
+### Settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LABELCHECK_PASSWORD` | *(none)* | Required to host. Turns on all the guards above. |
+| `LABELCHECK_BEHIND_PROXY` | off | Trust `X-Forwarded-*` from the proxy in front. |
+| `PORT` | 8080 | Port to listen on; most hosts set this for you. |
+| `LABELCHECK_THREADS` | 4 | Concurrent requests served. |
+| `LABELCHECK_RATE_MAX` | 40 | Checks allowed per address per window. |
+| `LABELCHECK_RATE_WINDOW` | 300 | Rate-limit window, in seconds. |
+| `LABELCHECK_TIME_BUDGET` | 5.0 | Seconds allowed per label. |
+
+### What hosting does not add
+
+There is no user accounts system, no audit log and no per-user separation:
+everyone with the password shares one service. That is appropriate for a
+small review team behind a single shared password, and not appropriate for
+handling other companies' confidential artwork at scale. For that, run local
+copies.
 
 ---
 
@@ -366,8 +635,36 @@ a single-user local tool.
 python3 -m unittest discover -s tests -v
 ```
 
-78 tests. The unit tests are pure and fast; the integration tests drive the
-real OCR engine over `samples/labels/`, which contain deliberate defects:
+119 tests, run automatically on every push and pull request by
+`.github/workflows/tests.yml` against Python 3.9 and 3.12. CI installs the
+real Tesseract engine and fails the build if it is missing, so the OCR tests
+cannot silently skip and report a hollow green tick.
+
+They come in three layers:
+
+- **Unit tests** — pure and fast: parsing, tolerances, classification,
+  path confinement, CSV safety.
+- **Integration tests** — drive the real OCR engine over `samples/labels/`.
+- **Web tests** (`tests/test_web.py`) — drive the Flask app through its test
+  client, covering every route, template, upload rejection and the batch
+  download. These catch broken templates that unit tests cannot.
+- **Hosting tests** (`tests/test_hosting.py`) — the password, the rate limit,
+  the open health check, the honest hosted footer, and that `wsgi.py` really
+  does refuse to start unprotected.
+
+The static build has its own tests, run with Node:
+
+```bash
+node tests/parity.mjs     # Python and JavaScript must agree
+node tests/browser.mjs    # drives the real page in Chromium
+```
+
+`browser.mjs` serves `web/` and drives Chromium through the whole path —
+vendored WebAssembly OCR, the ported rules, every page — checking that a
+compliant label passes, an undersized warning is caught, a missing warning is
+caught, and a front/back pair is combined correctly. Both run in CI.
+
+The sample labels carry deliberate defects:
 
 | Sample | Defect it exercises |
 | --- | --- |
@@ -388,8 +685,12 @@ budget.
 ## Layout
 
 ```
-app.py                     Flask routes and server startup
+app.py                     Flask routes, and the local server entry point
+wsgi.py                    Production entry point for a hosted deployment
 run.sh                     Dependency check, then start
+Dockerfile                 Image that includes the Tesseract engine
+render.yaml                Deployment blueprint for Render
+deploy/huggingface/        Free Docker hosting: Space card and publish script
 labelcheck/
   config.py                Limits, time budgets, feature flags
   rules.py                 Per-beverage CFR rules, tolerances, field matrix
@@ -401,10 +702,17 @@ labelcheck/
   application.py           Application data, CSV loading, optional TTB lookup
   bulk.py                  Batch runner and results export
   security.py              Upload validation, path confinement, CSV safety
+  hosting.py               Password, rate limit, proxy support (hosted only)
   findings.py              One finding: check, verdict, plain-English text
 templates/  static/        Large-type, high-contrast interface
 samples/make_samples.py    Generates the test artwork
+web/                       The static, browser-only build
+  index.html bulk.html help.html
+  js/                      The compliance logic, ported to JavaScript
+  vendor/                  Tesseract WebAssembly, vendored (see its README)
 tests/                     Unit and integration tests
+  browser.mjs              Drives the static build in Chromium
+  parity.mjs               Python and JavaScript must agree
 ```
 
 ---

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alcohol Label Compliance Checker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the main part of this page</a>
+<header class="site">
+  <div class="wrap">
+    <h1>Alcohol Label Compliance Checker</h1>
+    <p>Compares your label picture with the details you entered, and checks
+       federal labelling rules.</p>
+  </div>
+</header>
+<nav class="main" aria-label="Main">
+  <ul>
+    <li><a href="index.html" aria-current="page">Check one label</a></li>
+    <li><a href="bulk.html">Check many labels</a></li>
+    <li><a href="help.html">Help</a></li>
+  </ul>
+</nav>
+
+<main id="main" class="wrap">
+<div id="setup">
+  <h2>Check one label</h2>
+  <p class="lead">Type in your company and product details, add a picture of
+  the label, and press <strong>Check this label</strong>.</p>
+
+  <div class="notice">
+    <p><strong>Everything happens inside your web browser.</strong> Your label
+    pictures and company details are never uploaded anywhere. There is no
+    server doing the checking &ndash; the text reading runs on this device.</p>
+    <p class="engine-note">The first check loads the text-reading engine
+    (about 7(about 9&nbsp;MB) from this pagenbsp;MB) from this page. After that it is instant.</p>
+  </div>
+
+  <div id="error" class="notice error" hidden><p></p></div>
+
+  <form id="check-form">
+    <fieldset>
+      <legend>Step 1 &ndash; Your company</legend>
+      <div class="field">
+        <label for="bottlerName">Company name (bottler, producer or importer)</label>
+        <span class="hint">Exactly as it should appear on the label.
+          For example: Old Bridge Distillery</span>
+        <input type="text" id="bottlerName" autocomplete="organization">
+      </div>
+      <div class="field">
+        <label for="bottlerAddress">Company address</label>
+        <span class="hint">City and state is enough. For example: Frankfort, Kentucky</span>
+        <input type="text" id="bottlerAddress">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Step 2 &ndash; Your product</legend>
+      <div class="field">
+        <label for="brandName">Brand name</label>
+        <span class="hint">For example: Old Bridge</span>
+        <input type="text" id="brandName">
+      </div>
+      <div class="field">
+        <label for="beverageClass">What kind of drink is it?</label>
+        <span class="hint">This decides which rules are applied.</span>
+        <select id="beverageClass">
+          <option value="">Work it out from the class or type below</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="classType">Class or type</label>
+        <span class="hint">For example: Kentucky Straight Bourbon Whiskey,
+          India Pale Ale, Cabernet Sauvignon</span>
+        <input type="text" id="classType">
+      </div>
+      <div class="two-up">
+        <div class="field">
+          <label for="alcoholContent">Alcohol content</label>
+          <span class="hint">For example: 45% ABV, or 90 proof</span>
+          <input type="text" id="alcoholContent">
+        </div>
+        <div class="field">
+          <label for="netContents">Net contents</label>
+          <span class="hint">For example: 750 mL, or 12 fl oz</span>
+          <input type="text" id="netContents">
+        </div>
+      </div>
+      <div class="checkbox">
+        <input type="checkbox" id="isImport">
+        <label for="isImport">This product is imported into the United States</label>
+      </div>
+      <div class="field">
+        <label for="countryOfOrigin">Country it comes from</label>
+        <span class="hint">Only needed for imported products. For example: Scotland</span>
+        <input type="text" id="countryOfOrigin">
+      </div>
+      <div class="field">
+        <label for="containsSulfites">Does it contain sulfites?</label>
+        <span class="hint">Wine must say CONTAINS SULFITES when it holds 10 parts
+          per million or more. Nearly all wine does.</span>
+        <select id="containsSulfites">
+          <option value="">Not sure &ndash; check if the wording is there</option>
+          <option value="yes">Yes, 10 parts per million or more</option>
+          <option value="no">No, below 10 parts per million</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Step 3 &ndash; The label pictures</legend>
+      <p>You can send <strong>one or two pictures</strong>. Many containers put
+         the brand on the front and the health warning on the back, so if your
+         product has two labels, send both and they will be checked together as
+         one container. If everything is on a single label, just send one.</p>
+
+      <h3>Picture 1 &ndash; the front or main label</h3>
+      <div class="field">
+        <label for="image1">Choose the picture</label>
+        <span class="hint">PNG, JPEG, TIFF, BMP, WEBP or GIF. A sharp picture
+          taken straight on works best.</span>
+        <input type="file" id="image1"
+               accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif" required>
+      </div>
+      <div class="field">
+        <label for="width1">How wide is this label, in millimetres?
+          <span class="muted">(optional, but recommended)</span></label>
+        <span class="hint">Measure the printed label with a ruler. Without this
+          the tool cannot check whether the health warning letters are big
+          enough. A typical wine label is about 100 mm wide.</span>
+        <input type="number" id="width1" min="1" max="2000" step="0.1">
+      </div>
+
+      <h3>Picture 2 &ndash; the back label <span class="muted">(only if you have one)</span></h3>
+      <div class="field">
+        <label for="image2">Choose the picture</label>
+        <span class="hint">Leave this empty if everything is on one label.</span>
+        <input type="file" id="image2"
+               accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif">
+      </div>
+      <div class="field">
+        <label for="width2">How wide is the back label, in millimetres?
+          <span class="muted">(optional)</span></label>
+        <span class="hint">Measure this label separately. Front and back labels
+          are often different sizes.</span>
+        <input type="number" id="width2" min="1" max="2000" step="0.1">
+      </div>
+
+      <div class="field">
+        <label for="reference">Your own reference <span class="muted">(optional)</span></label>
+        <span class="hint">Anything that helps you find this later, such as a
+          product code.</span>
+        <input type="text" id="reference">
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button type="submit" id="submit">Check this label</button>
+    </div>
+  </form>
+</div>
+
+<div id="progress" class="progress" hidden>
+  <p class="what">Reading your label&hellip;</p>
+  <p id="progress-detail" class="small muted">Starting up</p>
+  <div class="bar"><span id="progress-bar"></span></div>
+</div>
+
+<div id="results" hidden></div>
+<div class="actions" id="again" hidden>
+  <button type="button" id="again-button">Check another label</button>
+  <a class="button secondary" href="bulk.html">Check many labels at once</a>
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><strong>Everything runs in your web browser.</strong> Your label
+       pictures and company details are never sent over the internet, and
+       nothing is saved after you close the page.</p>
+    <p class="small">This tool is a checking aid. It does not replace review
+       by a qualified person, and it is not an official government decision.</p>
+  </div>
+</footer>
+
+<script src="vendor/tesseract/tesseract.min.js"></script>
+<script type="module" src="js/ui.js"></script>
+</body>
+</html>

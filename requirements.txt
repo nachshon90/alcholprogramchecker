@@ -16,3 +16,7 @@ pytesseract>=0.3.10
 #   Windows:          https://github.com/UB-Mannheim/tesseract/wiki
 #
 # Verify with:  tesseract --version
+
+# Production web server, used by wsgi.py when the tool is hosted.
+# Not needed for local use.
+waitress>=3.0

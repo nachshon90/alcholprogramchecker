@@ -1,0 +1,40 @@
+# Deployment blueprint for Render (https://render.com).
+#
+# Docker is used rather than Render's Python runtime because the Tesseract
+# OCR engine is a system package that the Python runtime does not provide.
+services:
+  # The static, browser-only build. Free on Render: it serves files only,
+  # and all the checking happens in the visitor's browser.
+  - type: web
+    name: alcohol-label-checker-static
+    runtime: static
+    staticPublishPath: ./web
+    buildCommand: ""
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+
+  # The server build, for people who want the faster native OCR.
+  - type: web
+    name: alcohol-label-checker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # OCR needs more memory than the free instance has
+    healthCheckPath: /healthz
+    # ONE instance. Batch results live in the process's memory for ten
+    # minutes, so a download must return to the same process that ran it.
+    numInstances: 1
+    envVars:
+      - key: LABELCHECK_PASSWORD
+        sync: false        # set this by hand in the Render dashboard
+      - key: LABELCHECK_BEHIND_PROXY
+        value: "1"
+      - key: LABELCHECK_THREADS
+        value: "4"
